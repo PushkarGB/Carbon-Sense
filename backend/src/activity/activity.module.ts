@@ -30,5 +30,6 @@ import { RedisCacheService } from './redis-cache.service';
     EmissionFactorService,
     RedisCacheService,
   ],
+  exports: [ActivityEventsService],
 })
 export class ActivityModule {}

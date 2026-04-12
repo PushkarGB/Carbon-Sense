@@ -75,6 +75,12 @@ export interface TaskEvaluationContext {
   latestEmission: number;
   profileAverageAcHours: number;
   profileAverageDistance: number;
+  /**
+   * Mean `transport.distance` on prior daily logs where `transport.mode === 'walk'`
+   * (up to 7 most recent days before submission date). Matches Task Template Master List
+   * `transport_walk`: today's walked distance must exceed this baseline.
+   */
+  profileAverageWalkDistance: number;
   recentVehicleDistanceAverage: number;
 }
 
@@ -149,7 +155,8 @@ export function evaluateTaskCompletion(
     case 'transport_walk':
       return (
         context.activity.transport.mode === 'walk' &&
-        context.activity.transport.distance > 0
+        context.activity.transport.distance >
+          context.profileAverageWalkDistance
       );
     case 'ac_reduce':
       return (
@@ -177,6 +184,7 @@ export function evaluateTaskCompletion(
         context.latestEmission < context.currentAverageEmission
       );
     case 'low_impact_day':
+      // Template text: emission below threshold — v1 uses 80% of locked baseline emission.
       return (
         context.baselineEmission > 0 &&
         context.latestEmission < context.baselineEmission * 0.8

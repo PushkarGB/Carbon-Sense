@@ -1,10 +1,17 @@
 import { TaskTemplate } from '../schemas/task-template.schema';
 import {
   addDaysToYmd,
+  buildPersonalizationProfile,
+  computeAvgEmission7dFromRecords,
+  computeConsistencyBand,
+  computeDietNonVegDayFraction,
+  computeEmissionLevel,
+  computeUserTaskLevel,
   daysBetweenYmd,
   generateDailyTaskSelection,
   isTaskCoolingDown,
   shouldIncludeWeeklyInput,
+  templateConditionsMet,
   type TaskGenerationSignals,
 } from './task-generation.engine';
 
@@ -77,13 +84,19 @@ function baseSignals(
   overrides: Partial<TaskGenerationSignals> = {},
 ): TaskGenerationSignals {
   return {
+    avgEmission7d: 12,
+    baselineEmission: 10,
+    baselineStatus: 'locked',
     behaviorProfile: {
       avg_ac_hours: 0,
       avg_distance: 10,
       avg_energy_usage: 5,
       avg_transport_mode: 'car',
+      diet_non_veg_day_fraction: 0,
       eco_action_score: 0.5,
     },
+    currentAvgEmission: 11,
+    emissionHistoryTotals: [8, 9, 10, 11, 12, 13, 14, 15, 16],
     emissionTrend: 'stable',
     lastCompletionYmdByTaskId: new Map(),
     relaxCooldown: false,
@@ -141,5 +154,79 @@ describe('task-generation.engine', () => {
   it('addDaysToYmd and daysBetweenYmd are consistent', () => {
     expect(addDaysToYmd('2026-04-12', -1)).toBe('2026-04-11');
     expect(daysBetweenYmd('2026-04-01', '2026-04-08')).toBe(7);
+  });
+
+  it('computeAvgEmission7dFromRecords uses a 7-day calendar window', () => {
+    const avg = computeAvgEmission7dFromRecords(
+      [
+        { date: '2026-04-06', total_emission: 10 },
+        { date: '2026-04-12', total_emission: 20 },
+      ],
+      '2026-04-12',
+    );
+    expect(avg).toBe(15);
+  });
+
+  it('computeEmissionLevel uses percentiles when enough history exists', () => {
+    const hist = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+    expect(computeEmissionLevel(1, hist, 5, 'locked', 0)).toBe('low');
+    expect(computeEmissionLevel(10, hist, 5, 'locked', 0)).toBe('high');
+  });
+
+  it('computeEmissionLevel falls back to current average when history is short', () => {
+    expect(
+      computeEmissionLevel(5, [5, 5], 0, 'pending', 10),
+    ).toBe('low');
+    expect(
+      computeEmissionLevel(12, [5, 5], 0, 'pending', 10),
+    ).toBe('high');
+  });
+
+  it('computeConsistencyBand matches streak thresholds', () => {
+    expect(computeConsistencyBand(2)).toBe('low');
+    expect(computeConsistencyBand(5)).toBe('medium');
+    expect(computeConsistencyBand(11)).toBe('high');
+  });
+
+  it('computeUserTaskLevel incorporates consistency and trend', () => {
+    expect(
+      computeUserTaskLevel(0.35, 5, 'stable', computeConsistencyBand(5)),
+    ).toBe('beginner');
+    expect(
+      computeUserTaskLevel(0.85, 15, 'decreasing', computeConsistencyBand(15)),
+    ).toBe('advanced');
+  });
+
+  it('buildPersonalizationProfile aggregates doc §3 dimensions', () => {
+    const p = buildPersonalizationProfile(baseSignals());
+    expect(p.behavior_tags).toContain('PRIVATE_TRANSPORT_USER');
+    expect(p.engagement_level).toBe('medium');
+    expect(['low', 'medium', 'high']).toContain(p.emission_level);
+  });
+
+  it('computeDietNonVegDayFraction weights non_veg and mixed days', () => {
+    expect(
+      computeDietNonVegDayFraction([
+        { food: { diet_type: 'non_veg' } },
+        { food: { diet_type: 'veg' } },
+      ]),
+    ).toBe(0.5);
+    expect(
+      computeDietNonVegDayFraction([{ food: { diet_type: 'mixed' } }]),
+    ).toBe(0.5);
+  });
+
+  it('templateConditionsMet enforces optional template conditions object', () => {
+    const t = tpl({
+      task_id: 'cond_test',
+      category: 'emission_reduction',
+      conditions: { min_avg_distance_km: 20 },
+    });
+    const ok = templateConditionsMet(
+      t,
+      baseSignals().behaviorProfile,
+      new Set(),
+    );
+    expect(ok).toBe(false);
   });
 });

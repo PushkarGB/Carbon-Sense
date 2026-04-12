@@ -27,6 +27,8 @@ import { CompleteTaskDto } from './dto/complete-task.dto';
 import { EvaluateTasksDto } from './dto/evaluate-tasks.dto';
 import {
   addDaysToYmd,
+  computeAvgEmission7dFromRecords,
+  computeDietNonVegDayFraction,
   computeEmissionTrendFromTotals,
   generateDailyTaskSelection,
   type TaskGenerationSignals,
@@ -411,7 +413,7 @@ export class TasksService {
         this.carbonRecordModel
           .find({ user_id: userId })
           .sort({ date: -1 })
-          .limit(14)
+          .limit(90)
           .lean()
           .exec(),
       ]);
@@ -425,8 +427,13 @@ export class TasksService {
     );
 
     const behaviorProfile = this.buildBehaviorProfileFromLogs(lastSevenLogs);
-    const emissionTrend = computeEmissionTrendFromTotals(
-      [...carbonRecords].reverse().map((r) => r.total_emission),
+    const chronologicalTotals = [...carbonRecords]
+      .reverse()
+      .map((r) => r.total_emission);
+    const emissionTrend = computeEmissionTrendFromTotals(chronologicalTotals);
+    const avgEmission7d = computeAvgEmission7dFromRecords(
+      carbonRecords,
+      todayYmd,
     );
 
     const userRegisteredYmd = getDateStringInTimeZone(
@@ -435,16 +442,21 @@ export class TasksService {
     );
 
     const signals: TaskGenerationSignals = {
+      avgEmission7d,
+      baselineEmission: profile.performance_metrics.baseline_emission,
+      baselineStatus: profile.performance_metrics.baseline_status,
+      behaviorProfile,
+      currentAvgEmission: profile.performance_metrics.current_avg_emission,
+      emissionHistoryTotals: chronologicalTotals,
+      emissionTrend,
+      lastCompletionYmdByTaskId,
+      relaxCooldown: false,
+      streakDays: profile.streak_days,
+      taskCompletionRate: profile.engagement_metrics.task_completion_rate,
+      templates: templates as TaskTemplate[],
       todayYmd,
       userRegisteredYmd,
-      templates: templates as TaskTemplate[],
       yesterdayTaskIds,
-      lastCompletionYmdByTaskId,
-      behaviorProfile,
-      taskCompletionRate: profile.engagement_metrics.task_completion_rate,
-      streakDays: profile.streak_days,
-      emissionTrend,
-      relaxCooldown: false,
     };
 
     let selection;
@@ -518,7 +530,7 @@ export class TasksService {
 
   private buildBehaviorProfileFromLogs(
     logs: Array<
-      Pick<DailyActivityLog, 'eco_actions' | 'electricity' | 'transport'>
+      Pick<DailyActivityLog, 'eco_actions' | 'electricity' | 'food' | 'transport'>
     >,
   ): TaskGenerationSignals['behaviorProfile'] {
     if (logs.length === 0) {
@@ -527,6 +539,7 @@ export class TasksService {
         avg_distance: 0,
         avg_energy_usage: 0,
         avg_transport_mode: '',
+        diet_non_veg_day_fraction: 0,
         eco_action_score: 0,
       };
     }
@@ -552,6 +565,7 @@ export class TasksService {
         logs.map((l) => l.electricity.units_consumed),
       ),
       avg_transport_mode: avgTransportMode,
+      diet_non_veg_day_fraction: computeDietNonVegDayFraction(logs),
       eco_action_score: average(logs.map((l) => l.eco_actions.length)),
     };
   }
@@ -617,8 +631,11 @@ export class TasksService {
       });
     }
 
-    const recentVehicleDistanceAverage =
-      await this.calculateRecentVehicleDistanceAverage(userId, todayYmd, session);
+    const [recentVehicleDistanceAverage, profileAverageWalkDistance] =
+      await Promise.all([
+        this.calculateRecentVehicleDistanceAverage(userId, todayYmd, session),
+        this.calculateRecentWalkDistanceAverage(userId, todayYmd, session),
+      ]);
 
     const isEligible = evaluateTaskCompletion(
       { completion_type: 'hybrid', task_id: taskId },
@@ -638,6 +655,7 @@ export class TasksService {
         latestEmission: 0,
         profileAverageAcHours: userProfile.behavior_profile.avg_ac_hours,
         profileAverageDistance: userProfile.behavior_profile.avg_distance,
+        profileAverageWalkDistance,
         recentVehicleDistanceAverage,
         yesterdayEmission: 0,
       },
@@ -670,6 +688,27 @@ export class TasksService {
       .exec();
 
     return average(recentVehicleLogs.map((log) => log.transport.distance));
+  }
+
+  private async calculateRecentWalkDistanceAverage(
+    userId: Types.ObjectId,
+    date: string,
+    session: ClientSession,
+  ): Promise<number> {
+    const recentWalkLogs = await this.dailyActivityLogModel
+      .find({
+        date: { $lt: date },
+        type: 'daily',
+        user_id: userId,
+        'transport.mode': 'walk',
+      })
+      .sort({ date: -1 })
+      .limit(7)
+      .session(session)
+      .lean()
+      .exec();
+
+    return average(recentWalkLogs.map((log) => log.transport.distance));
   }
 
   private async buildTodayResponse(

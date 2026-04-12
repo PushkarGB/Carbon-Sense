@@ -24,10 +24,12 @@ import { CreateDailyActivityDto } from './dto/create-daily-activity.dto';
 import { EmissionFactorService } from './emission-factor.service';
 import {
   addDaysToYmd,
+  computeAvgEmission7dFromRecords,
+  computeDietNonVegDayFraction,
   computeEmissionTrendFromTotals,
   generateDailyTaskSelection,
-  type TaskGenerationSignals,
   shouldIncludeWeeklyInput,
+  type TaskGenerationSignals,
 } from '../tasks/task-generation.engine';
 
 type TaskStats = UserProfile['task_stats'];
@@ -315,12 +317,19 @@ export class ActivityService {
       return [];
     }
 
-    const recentVehicleDistanceAverage =
-      await this.calculateRecentVehicleDistanceAverage(
-        userId,
-        activity.date,
-        session,
-      );
+    const [recentVehicleDistanceAverage, profileAverageWalkDistance] =
+      await Promise.all([
+        this.calculateRecentVehicleDistanceAverage(
+          userId,
+          activity.date,
+          session,
+        ),
+        this.calculateRecentWalkDistanceAverage(
+          userId,
+          activity.date,
+          session,
+        ),
+      ]);
 
     const taskTemplates = await this.taskTemplateModel
       .find({
@@ -357,6 +366,7 @@ export class ActivityService {
         latestEmission,
         profileAverageAcHours: behaviorProfile.avg_ac_hours,
         profileAverageDistance: behaviorProfile.avg_distance,
+        profileAverageWalkDistance,
         recentVehicleDistanceAverage,
       });
 
@@ -422,11 +432,36 @@ export class ActivityService {
     );
   }
 
+  /** Prior walk distances (walk mode only) for `transport_walk` baseline. */
+  private async calculateRecentWalkDistanceAverage(
+    userId: Types.ObjectId,
+    date: string,
+    session: ClientSession,
+  ): Promise<number> {
+    const recentWalkLogs = await this.dailyActivityLogModel
+      .find({
+        date: { $lt: date },
+        type: 'daily',
+        user_id: userId,
+        'transport.mode': 'walk',
+      })
+      .sort({ date: -1 })
+      .limit(7)
+      .session(session)
+      .lean()
+      .exec();
+
+    return average(recentWalkLogs.map((log) => log.transport.distance));
+  }
+
   private async ensureGeneratedDailyTasks(
     userId: Types.ObjectId,
     todayYmd: string,
     user: Pick<User, 'created_at'>,
-    profile: Pick<UserProfile, 'engagement_metrics' | 'streak_days'>,
+    profile: Pick<
+      UserProfile,
+      'engagement_metrics' | 'streak_days' | 'performance_metrics'
+    >,
     session: ClientSession,
   ): Promise<UserDailyTask> {
     const existing = await this.userDailyTaskModel
@@ -475,7 +510,7 @@ export class ActivityService {
         this.carbonRecordModel
           .find({ user_id: userId })
           .sort({ date: -1 })
-          .limit(14)
+          .limit(90)
           .session(session)
           .lean()
           .exec(),
@@ -488,15 +523,28 @@ export class ActivityService {
       historyDocs,
       todayYmd,
     );
-    const behaviorProfile = this.buildBehaviorProfile(lastSevenLogs);
-    const emissionTrend = computeEmissionTrendFromTotals(
-      [...recentCarbonRecords]
-        .reverse()
-        .map((record) => record.total_emission),
+    const behaviorProfileBase = this.buildBehaviorProfile(lastSevenLogs);
+    const behaviorProfile: TaskGenerationSignals['behaviorProfile'] = {
+      ...behaviorProfileBase,
+      diet_non_veg_day_fraction:
+        computeDietNonVegDayFraction(lastSevenLogs),
+    };
+    const chronologicalTotals = [...recentCarbonRecords]
+      .reverse()
+      .map((record) => record.total_emission);
+    const emissionTrend = computeEmissionTrendFromTotals(chronologicalTotals);
+    const avgEmission7d = computeAvgEmission7dFromRecords(
+      recentCarbonRecords,
+      todayYmd,
     );
 
     const selection = generateDailyTaskSelection({
+      avgEmission7d,
+      baselineEmission: profile.performance_metrics.baseline_emission,
+      baselineStatus: profile.performance_metrics.baseline_status,
       behaviorProfile,
+      currentAvgEmission: profile.performance_metrics.current_avg_emission,
+      emissionHistoryTotals: chronologicalTotals,
       emissionTrend,
       lastCompletionYmdByTaskId,
       relaxCooldown: false,

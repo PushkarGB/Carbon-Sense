@@ -75,6 +75,7 @@ describe('ActivityService', () => {
           },
         ]),
       )
+      .mockReturnValueOnce(createQuery([]))
       .mockReturnValueOnce(createQuery([]));
 
     const carbonRecordModel = createPersistedModel();
@@ -257,7 +258,9 @@ describe('ActivityService', () => {
     );
     dailyActivityLogModel.find = jest
       .fn()
+      .mockReturnValueOnce(createQuery([]))
       .mockReturnValueOnce(createQuery(dailyLogsAfterSave))
+      .mockReturnValueOnce(createQuery([]))
       .mockReturnValueOnce(createQuery([]));
 
     const carbonRecordModel = createPersistedModel();

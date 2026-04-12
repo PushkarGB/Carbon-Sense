@@ -40,6 +40,8 @@ CarbonSense — Task Template Master List (v1)
 
 `   { "task_id": "transport_walk", "category": "emission_reduction", "title": "Walk More", "description": "Walk for short distances today", "completion_type": "hybrid", "evaluation_logic": "distance_walked > baseline", "conditions": {}, "cooldown_days": 1, "priority": 4, "active": true }   `
 
+*Live API:* “Baseline” = your **average walk distance on past days** (up to 7 days) where you logged **walk**. Today passes if you walked **farther than that average**. If you have **no** walk history, baseline is treated as **0**, so any walk distance above zero counts.
+
 `   { "task_id": "transport_carpool", "category": "emission_reduction", "title": "Share Ride", "description": "Carpool instead of traveling alone", "completion_type": "manual", "evaluation_logic": null, "conditions": {}, "cooldown_days": 3, "priority": 4, "active": true }   `
 
 `   { "task_id": "ac_reduce", "category": "emission_reduction", "title": "AC Control", "description": "Reduce AC usage today", "completion_type": "hybrid", "evaluation_logic": "ac_hours < avg_ac_hours", "conditions": {}, "cooldown_days": 1, "priority": 5, "active": true }   `
@@ -75,6 +77,8 @@ CarbonSense — Task Template Master List (v1)
 `   { "task_id": "below_average", "category": "emission_reduction", "title": "Below Average", "description": "Keep emissions below your average", "completion_type": "auto", "evaluation_logic": "today_emission < avg_emission", "conditions": {}, "cooldown_days": 1, "priority": 5, "active": true }   `
 
 `   { "task_id": "low_impact_day", "category": "emission_reduction", "title": "Low Impact", "description": "Maintain a low emission day", "completion_type": "auto", "evaluation_logic": "emission < threshold", "conditions": {}, "cooldown_days": 2, "priority": 5, "active": true }   `
+
+*Live API:* “Threshold” means **below 80% of your locked baseline emission**. If baseline is not ready yet, this task will **not** auto-complete.
 
 TOTAL TASK COUNT
 ================

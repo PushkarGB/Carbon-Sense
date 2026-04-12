@@ -551,3 +551,19 @@ FINAL DEFINITION
 ================
 
 Personalization Engine =Rule-based adaptive task selectorthat evolves into ML-driven system
+
+---
+
+## Appendix A — How the live API reads this doc (plain language)
+
+- **Eco signal (section 2.1)**  
+  We use your **average number of eco actions logged per day** over the last week. That stands in for “eco task completion rate” until a stricter metric is needed.
+
+- **Diet**  
+  We derive a simple score from your **logged meals** (veg / non-veg / mixed) over the last week. If the pattern suggests more animal-based days, we **prefer** meatless and local-food style tasks. This is **only** used when building the daily list.
+
+- **Engagement at exactly 70%**  
+  Counts as **medium**. Above 70% is **high**.
+
+- **User level (section 6)**  
+  We use completion rate, streak, emission trend, **and** the streak-based consistency band from section 3.3 together—not the single-line formula alone.

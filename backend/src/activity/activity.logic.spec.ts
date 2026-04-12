@@ -74,6 +74,7 @@ describe('activity logic', () => {
       latestEmission: 10,
       profileAverageAcHours: 4,
       profileAverageDistance: 8,
+      profileAverageWalkDistance: 3,
       recentVehicleDistanceAverage: 6,
       yesterdayEmission: 11,
     };
@@ -179,9 +180,17 @@ describe('activity logic', () => {
       latestEmission: 6,
       profileAverageAcHours: 2,
       profileAverageDistance: 2,
+      profileAverageWalkDistance: 5,
       recentVehicleDistanceAverage: 0,
       yesterdayEmission: 0,
     };
+
+    expect(
+      evaluateTaskCompletion(
+        { completion_type: 'hybrid', task_id: 'transport_walk' },
+        context,
+      ),
+    ).toBe(false);
 
     expect(
       evaluateTaskCompletion(
@@ -237,6 +246,7 @@ describe('activity logic', () => {
       latestEmission: 0,
       profileAverageAcHours: 0,
       profileAverageDistance: 0,
+      profileAverageWalkDistance: 0,
       recentVehicleDistanceAverage: 0,
       yesterdayEmission: 0,
     };

@@ -347,3 +347,11 @@ Generate today tasks
 ✔ No late task issues
 
 ✔ Streak logic simplified and robust
+
+---
+
+## Note — What this API does today
+
+- **Daily and weekly submit** still own **saving the log**, **emissions**, **profile numbers**, and **auto / hybrid task checks** on the server. **Manual task complete** and **awareness “evaluate”** are separate endpoints; they only update **tasks** and **task stats**, not the activity log.
+
+- **Streak on app open** and **midnight cron** (cleanup + pre-build tasks) are described for the **full product** but are **not** in the current server build. Use **get today’s tasks** (and submit-time safety) for now—see the Daily Task doc, section 17.

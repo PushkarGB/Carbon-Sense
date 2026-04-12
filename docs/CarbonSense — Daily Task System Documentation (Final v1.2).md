@@ -383,3 +383,31 @@ fuel_save:
 
 short_trip_replace:
 → walking used AND distance reduced vs baseline
+
+17\. WHAT THE SERVER DOES TODAY (SHORT NOTES)
+============================================
+
+These notes match how the **current API** behaves. They do not replace the main rules above.
+
+**Diet (from daily logs)**  
+We look at what you logged for food over the last week and use that only to **pick** tasks (for example, meatless or local-food tasks when the pattern fits). That summary is **not** saved on your profile.
+
+**Eco habit signal**  
+The personalization doc mentions an “eco completion” style signal. In the API today we use **how many eco actions you logged per day** on average (last week), not how many eco *tasks* you finished in the task list.
+
+**Tasks without opening at midnight**  
+Some docs describe a **night job** that deletes old tasks and creates new ones, and a separate **app open** path for streaks. Those pieces are **not running in the server yet**. Today, tasks are created when needed: when you call **get today’s tasks**, or when you submit activity and today’s list was missing.
+
+---
+
+18\. HOW THIS CONNECTS TO BADGES, JOBS, AND THE APP (PLANNED VS LIVE)
+=====================================================================
+
+**Badges**  
+Task counts and emissions that the API updates are the **inputs** badges will use. The **Badge System** doc describes *when* to evaluate (after tasks, streak, emissions). Today the API **fires events** after a successful write (for example task completed, emission updated); a **badge worker** that listens and writes `user_badges` is still to be wired up—see *Badge System Documentation* and *Execution Flow*.
+
+**Background jobs**  
+*Background Job Architecture* describes cron queues for task cleanup, generation, leaderboard refresh, and badge retries. **None of that is deployed in the API-only phase**; the app should still assume **end-of-day expiry** and **idempotent** “one row per user per day” as documented.
+
+**Frontend / UI**  
+Section **14 (UI behavior)** is for the **mobile app**: show title, description, status, and a checkbox for manual tasks; load tasks before submit; after daily submit, refresh so auto tasks can show completed. The server exposes **GET /tasks/today**, **POST /tasks/complete**, and **POST /tasks/evaluate** so the client can match that flow.

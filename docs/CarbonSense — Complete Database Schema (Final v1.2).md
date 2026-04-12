@@ -76,7 +76,7 @@ Purpose
 
 Raw user input (immutable)
 
- `   {  "user_id": "ObjectId",  "date": "YYYY-MM-DD",  "type": "daily | weekly",  "transport": {    "mode": "bike | car | bus | metro | walk",    "distance": 0,    "fuel_type": "petrol | diesel | none"  },  "electricity": {    "units_consumed": 0,    "ac_hours": 0  },  "food": {    "diet_type": "veg | non_veg | mixed",    "meals_count": 0  },  "waste": {    "segregation": true,    "bags_used": 0  },  "eco_actions": ["eco_bag", "eco_bottle"],  "created_at": "timestamp"}   `
+ `   {  "user_id": "ObjectId",  "date": "YYYY-MM-DD",  "type": "daily | weekly",  "transport": {    "mode": "bike | car | bus | metro | walk",    "distance": 0, },  "electricity": {    "units_consumed": 0,    "ac_hours": 0  },  "food": {    "diet_type": "veg | non_veg | mixed",    "meals_count": 0  },  "waste": {    "segregation": true,    "bags_used": 0  },  "eco_actions": ["eco_bag", "eco_bottle"],  "created_at": "timestamp"}   `
 
 ### Constraints
 
@@ -202,7 +202,7 @@ Stores emission constants
 
 ### {
 
-### "type": "electricity | petrol | diesel | transport",
+### "type": "electricity"  | "transport_car"  | "transport_bike"  | "transport_bus"  | "transport_metro"  | "transport_walk"
 
 ### "value": 0,
 
@@ -216,6 +216,9 @@ Stores emission constants
 
 *   Electricity → 0.716 kg CO₂/kWh
     
+### Transport emission factors are mode-specific.
+
+### There is no generic "transport" factor.
 
 12\. COLLECTION: aqi\_data
 ==========================

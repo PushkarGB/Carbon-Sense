@@ -41,6 +41,8 @@ This remains the ONLY write entry for:
 2\. Store daily\_activity\_logs
 
 3\. Calculate emissions
+→ Fetch emission factors (cached)
+→ Apply calculation logic
 
 4\. Store carbon\_records
 

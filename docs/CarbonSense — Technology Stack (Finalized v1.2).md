@@ -160,6 +160,13 @@ The stack is optimized for:
 
 \- Supporting queue infrastructure
 
+\- Emission Factor Caching
+
+- Emission factors are cached in Redis
+- TTL: 7 days
+- Reduces DB load
+- Ensures fast emission calculations
+
 \#### BullMQ
 
 \- Job queue management

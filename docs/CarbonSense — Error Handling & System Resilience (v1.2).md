@@ -20,6 +20,8 @@ Ensure:
 
 Affect core transaction:
 
+\- Emission Factor fetch failure
+
 \- Validation failure (duplicate submission)
 
 \- Emission calculation failure
@@ -225,6 +227,18 @@ Retry Policy
     
 *   Delay: exponential
     
+10\. Emission Factor Fetch Failure
+========================
+
+Action
+------------
+- Abort transaction
+- Return EMISSION_FACTOR_FETCH_FAILED
+- no fallback emission factors allowed.
+
+Reason:
+→ Prevent incorrect emission results
+→ Maintain scientific integrity
 
 Idempotency Rules
 -----------------

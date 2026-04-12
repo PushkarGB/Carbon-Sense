@@ -80,7 +80,7 @@ CarbonSense is a **behavior-driven carbon footprint tracking application** that:
 3.4 Constraint
 --------------
 
- `   UNIQUE KEY:  (user_id + date + type)  Rules:  - Only 1 daily log per day  - Only 1 weekly log per week  - Duplicate submissions overwrite existing record   `
+ `   UNIQUE KEY:  (user_id + date + type)  Rules:  - Only 1 daily log per day  - Only 1 weekly log per week  - Duplicate submissions are not allowed  `
 
 4\. MEDIA STORAGE
 =================
@@ -544,7 +544,7 @@ Output
 21\. DAILY USER JOURNEY
 =======================
 
- `   Open App  ↓  View Dashboard  ↓  Log Daily Activity  ↓  Emission Calculated  ↓  Streak Updated  ↓  Badges Checked  ↓  Leaderboard Updated   `
+ `   Open App ↓  Streak Updated ↓  View Dashboard  ↓  Log Daily Activity  ↓  Emission Calculated   ↓  Badges Checked  ↓  Leaderboard Updated   `
 
 22\. WEEKLY USER JOURNEY
 ========================

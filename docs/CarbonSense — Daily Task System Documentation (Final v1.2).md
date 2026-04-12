@@ -370,3 +370,16 @@ FINAL DEFINITION
 ================
 
  `   Daily Task System =  Dynamic + Personalized + Auto-Evaluated Behavioral Engine  Goal:  Drive consistent sustainable habits, not just tracking.   `
+ 
+ NOTE
+ ================
+
+Fuel-based comparisons are NOT used.
+
+All transport-related evaluations are distance-based.
+
+fuel_save:
+→ today distance < avg_distance
+
+short_trip_replace:
+→ walking used AND distance reduced vs baseline

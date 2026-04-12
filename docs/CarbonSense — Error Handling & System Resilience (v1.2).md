@@ -12,6 +12,8 @@ Ensure:
 
 \- Reliable retries for async systems
 
+**Related:** *CarbonSense — Technology Stack (Finalized v1.2)* §5–§6 (Redis + BullMQ); *CarbonSense — Background Job Architecture (v1)* §3–§4 (queue/job payloads including **BADGE_RETRY**).
+
 \---
 
 \# 1. ERROR CLASSIFICATION
@@ -162,10 +164,91 @@ Non-blocking
 Handling
 --------
 
-*   Push failed event to retry queue
-    
+*   Push a **BADGE_RETRY** job onto **badge_queue** (BullMQ) with the shape below so the worker can re-run the same evaluator with the original event context.
 
- `   {  "type": "BADGE_RETRY",  "payload": { user_id, trigger_event }}   `
+\### Retry job payload (queue / \`job.data\`)
+
+Top-level \`type\` is always **BADGE_RETRY**. **trigger_event** selects which badge path to run; **payload** is the **full** in-process event object (same fields the badge engine already uses: **TASK_EVALUATED**, **STREAK_UPDATED**, or **EMISSION_UPDATED**), including string \`userId\` on nested payloads.
+
+\`\`\`json
+
+{
+
+  "type": "BADGE_RETRY",
+
+  "trigger_event": "TASK_EVALUATED",
+
+  "payload": {
+
+    "userId": "64a1b2c3d4e5f6789012345",
+
+    "date": "2026-04-12",
+
+    "completedTaskIds": ["eco_reuse"]
+
+  }
+
+}
+
+\`\`\`
+
+\`\`\`json
+
+{
+
+  "type": "BADGE_RETRY",
+
+  "trigger_event": "STREAK_UPDATED",
+
+  "payload": {
+
+    "userId": "64a1b2c3d4e5f6789012345",
+
+    "date": "2026-04-12",
+
+    "streakDays": 7
+
+  }
+
+}
+
+\`\`\`
+
+\`\`\`json
+
+{
+
+  "type": "BADGE_RETRY",
+
+  "trigger_event": "EMISSION_UPDATED",
+
+  "payload": {
+
+    "userId": "64a1b2c3d4e5f6789012345",
+
+    "date": "2026-04-12",
+
+    "totalEmission": 12.4,
+
+    "breakdown": {
+
+      "transport": 1,
+
+      "electricity": 2,
+
+      "food": 3,
+
+      "waste": 4
+
+    }
+
+  }
+
+}
+
+\`\`\`
+
+Bull **job.name** is **BADGE_RETRY**; queue default options apply **max 3** attempts with **exponential** backoff.
 
 Retry Strategy
 --------------
@@ -178,9 +261,11 @@ Retry Strategy
 Final Failure
 -------------
 
-*   Log in error collection
-    
-*   No user impact
+*   Persist **job_logs** (failed job, retry count, serialized **job.data**) per *Background Job Architecture* / **Complete Database Schema** (\`job_logs.type\` = **BADGE_RETRY**).
+
+*   For badge-scoped follow-up, also write **error_logs** with \`module\` = **badge** and \`user_id\` from \`payload.userId\` when present.
+
+*   No impact on the user’s completed submission or open API responses.
     
 
 7\. STREAK FAILURE
@@ -216,9 +301,12 @@ Handling
     
 *   Next cron will fix
     
+*   Clients may call **POST /leaderboard/refresh** (authenticated) to recompute **only** the signed-in user’s **leaderboards** row without waiting for the scheduled **LEADERBOARD_UPDATE** job (see *Execution Flow* §9 and *Background Job Architecture* §3.3).
 
 9\. JOB FAILURE HANDLING
 ========================
+
+Applies to BullMQ workers (**task_queue**, **leaderboard_queue**, **badge_queue**): same retry and idempotency rules as *Background Job Architecture* §6.
 
 Retry Policy
 ------------

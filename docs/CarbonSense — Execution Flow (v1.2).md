@@ -354,4 +354,6 @@ Generate today tasks
 
 - **Daily and weekly submit** still own **saving the log**, **emissions**, **profile numbers**, and **auto / hybrid task checks** on the server. **Manual task complete** and **awareness “evaluate”** are separate endpoints; they only update **tasks** and **task stats**, not the activity log.
 
-- **Streak on app open** and **midnight cron** (cleanup + pre-build tasks) are described for the **full product** but are **not** in the current server build. Use **get today’s tasks** (and submit-time safety) for now—see the Daily Task doc, section 17.
+- **Streak** is updated on **GET /app/open** (lazy). When the backend is configured with **Redis and BullMQ** (*Background Job Architecture*), **midnight cron** dispatches **TASK_RESET** on **task_queue** (delete yesterday’s `user_daily_tasks` per user, ensure today’s row). **GET /tasks/today** still on-demand creates today’s tasks if missing and, when workers are enabled, may enqueue **TASK_GENERATE_SINGLE** for the same operation. If workers are disabled, rely on **GET /tasks/today** and submit-time generation as in the Daily Task doc, section 17.
+
+- **Leaderboard:** With workers enabled, a cron job dispatches **LEADERBOARD_UPDATE** on **leaderboard_queue** to refresh **`leaderboards`** from **`carbon_records`**. **POST /leaderboard/refresh** (JWT, §9) recomputes the signed-in user’s leaderboard row only.

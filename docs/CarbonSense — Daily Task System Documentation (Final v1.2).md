@@ -396,7 +396,7 @@ We look at what you logged for food over the last week and use that only to **pi
 The personalization doc mentions an “eco completion” style signal. In the API today we use **how many eco actions you logged per day** on average (last week), not how many eco *tasks* you finished in the task list.
 
 **Tasks without opening at midnight**  
-Some docs describe a **night job** that deletes old tasks and creates new ones, and a separate **app open** path for streaks. Those pieces are **not running in the server yet**. Today, tasks are created when needed: when you call **get today’s tasks**, or when you submit activity and today’s list was missing.
+When the backend is configured with **Redis and BullMQ** (see *Background Job Architecture*), a **midnight** job (Asia/Kolkata) deletes each user’s **yesterday** `user_daily_tasks` document and ensures **today**’s row exists using the same personalization rules as the API. **Streak** updates remain on **GET /app/open**, not on that job. If workers are not enabled, tasks are still created when you call **GET /tasks/today** or when you submit activity and today’s list was missing.
 
 ---
 
@@ -404,10 +404,10 @@ Some docs describe a **night job** that deletes old tasks and creates new ones, 
 =====================================================================
 
 **Badges**  
-Task counts and emissions that the API updates are the **inputs** badges will use. The **Badge System** doc describes *when* to evaluate (after tasks, streak, emissions). Today the API **fires events** after a successful write (for example task completed, emission updated); a **badge worker** that listens and writes `user_badges` is still to be wired up—see *Badge System Documentation* and *Execution Flow*.
+After successful writes, the **badge engine** listens for task, streak, and emission events, evaluates rules from the **Badge System** doc, and inserts into **`user_badges`** when thresholds are met (idempotent via the unique index). See *Badge System Documentation* and *Execution Flow*.
 
 **Background jobs**  
-*Background Job Architecture* describes cron queues for task cleanup, generation, leaderboard refresh, and badge retries. **None of that is deployed in the API-only phase**; the app should still assume **end-of-day expiry** and **idempotent** “one row per user per day” as documented.
+With Redis + BullMQ enabled, the server runs the queues in *Background Job Architecture*: **task_queue** (midnight **TASK_RESET**; **TASK_GENERATE_SINGLE** when **GET /tasks/today** finds no row for today—the job is queued for durability while the API still returns today’s tasks in the same response), **leaderboard_queue** (scheduled refresh of **`leaderboards`** from **`carbon_records`**), and **badge_queue** (**BADGE_RETRY** after a failed in-process badge evaluation). The app should still assume **end-of-day expiry** and **idempotent** “one row per user per day.” **POST /leaderboard/refresh** (authenticated) recomputes only the current user’s leaderboard row—see *Execution Flow* §9.
 
 **Frontend / UI**  
 Section **14 (UI behavior)** is for the **mobile app**: show title, description, status, and a checkbox for manual tasks; load tasks before submit; after daily submit, refresh so auto tasks can show completed. The server exposes **GET /tasks/today**, **POST /tasks/complete**, and **POST /tasks/evaluate** so the client can match that flow.

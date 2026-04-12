@@ -1,11 +1,15 @@
+import { InjectQueue } from '@nestjs/bullmq';
 import {
   BadRequestException,
   ConflictException,
   Injectable,
   InternalServerErrorException,
+  Logger,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
 import { InjectConnection, InjectModel } from '@nestjs/mongoose';
+import { Queue } from 'bullmq';
 import { ClientSession, Connection, Model, Types } from 'mongoose';
 import { ActivityEventsService } from '../activity/activity-events.service';
 import {
@@ -26,6 +30,11 @@ import {
 import { CompleteTaskDto } from './dto/complete-task.dto';
 import { EvaluateTasksDto } from './dto/evaluate-tasks.dto';
 import {
+  JOB_NAME_TASK_GENERATE_SINGLE,
+  JOB_PRIORITY_MEDIUM,
+  TASK_QUEUE_NAME,
+} from '../jobs/queue.constants';
+import {
   addDaysToYmd,
   computeAvgEmission7dFromRecords,
   computeDietNonVegDayFraction,
@@ -38,6 +47,8 @@ type TaskStats = UserProfile['task_stats'];
 
 @Injectable()
 export class TasksService {
+  private readonly logger = new Logger(TasksService.name);
+
   constructor(
     @InjectConnection() private readonly connection: Connection,
     @InjectModel('User') private readonly userModel: Model<User>,
@@ -49,7 +60,36 @@ export class TasksService {
     @InjectModel('CarbonRecord')
     private readonly carbonRecordModel: Model<CarbonRecord>,
     private readonly activityEventsService: ActivityEventsService,
+    @Optional()
+    @InjectQueue(TASK_QUEUE_NAME)
+    private readonly taskQueue?: Queue,
   ) {}
+
+  /**
+   * Midnight task reset (Background Job Architecture §3.1): remove yesterday’s
+   * `user_daily_tasks` row for the user, then ensure today’s row exists via the
+   * personalization engine (idempotent if today already exists).
+   */
+  async runScheduledDailyTaskResetForUser(userId: Types.ObjectId): Promise<void> {
+    const now = new Date();
+    const todayYmd = getDateStringInTimeZone(now, INDIA_TIME_ZONE);
+    const yesterdayYmd = addDaysToYmd(todayYmd, -1);
+    await this.userDailyTaskModel
+      .deleteMany({ user_id: userId, date: yesterdayYmd })
+      .exec();
+    await this.ensureGeneratedDailyTasks(userId, todayYmd);
+  }
+
+  /**
+   * Background Job Architecture §3.2 — worker entry for `TASK_GENERATE_SINGLE`
+   * (idempotent with `ensureGeneratedDailyTasks`).
+   */
+  async runTaskGenerateSingleJob(
+    userId: Types.ObjectId,
+    dateYmd: string,
+  ): Promise<void> {
+    await this.ensureGeneratedDailyTasks(userId, dateYmd);
+  }
 
   async getTodayTasks(userId: Types.ObjectId) {
     const todayYmd = getDateStringInTimeZone(new Date(), INDIA_TIME_ZONE);
@@ -62,8 +102,42 @@ export class TasksService {
       return this.buildTodayResponse(todayYmd, existing.tasks);
     }
 
+    await this.enqueueTaskGenerateSingleJob(userId, todayYmd);
     const doc = await this.ensureGeneratedDailyTasks(userId, todayYmd);
     return this.buildTodayResponse(todayYmd, doc.tasks);
+  }
+
+  /** §3.2 — enqueue before synchronous generation so the queue carries the fallback job. */
+  private async enqueueTaskGenerateSingleJob(
+    userId: Types.ObjectId,
+    dateYmd: string,
+  ): Promise<void> {
+    if (!this.taskQueue) {
+      return;
+    }
+    try {
+      await this.taskQueue.add(
+        JOB_NAME_TASK_GENERATE_SINGLE,
+        {
+          type: JOB_NAME_TASK_GENERATE_SINGLE,
+          priority: 'medium',
+          user_id: userId.toString(),
+          date: dateYmd,
+          created_at: new Date().toISOString(),
+        },
+        {
+          jobId: `task-gen-${userId.toString()}-${dateYmd}`,
+          removeOnComplete: true,
+          priority: JOB_PRIORITY_MEDIUM,
+        },
+      );
+    } catch (error) {
+      this.logger.warn(
+        `TASK_GENERATE_SINGLE enqueue failed for user ${userId.toString()}: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+    }
   }
 
   async completeTask(userId: Types.ObjectId, dto: CompleteTaskDto) {

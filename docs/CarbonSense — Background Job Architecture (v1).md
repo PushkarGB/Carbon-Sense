@@ -18,6 +18,8 @@ Goal:
 
 → Keep main API fast, consistent, and failure-safe
 
+**Related:** *CarbonSense — Technology Stack (Finalized v1.2)* §5 (cache + queue layer) and §6 (background job system) summarize Redis, BullMQ, and cron placement; this document is the **contract** for job names, payloads (**§4**), and flows (**§3**, **§10**). Badge retry logging details: *CarbonSense — Error Handling & System Resilience (v1.2)* §6–§9.
+
 \---
 
 \# 1. ARCHITECTURE OVERVIEW
@@ -82,13 +84,13 @@ Responsibilities:
 
 \## 2.4 Worker Services
 
-Dedicated processors for each job type:
+Dedicated processors for each queue:
 
-\- Task Worker
+\- **task_queue** — one worker handles **TASK_RESET** (midnight batch) and **TASK_GENERATE_SINGLE** (single user + date from §3.2), distinguished by Bull **job.name**.
 
-\- Leaderboard Worker
+\- **leaderboard_queue** — **LEADERBOARD_UPDATE** (scheduled full refresh).
 
-\- Badge Retry Worker
+\- **badge_queue** — **BADGE_RETRY** (§3.4).
 
 \- (Future) ML Worker
 
@@ -150,7 +152,17 @@ IF not exist:
 
 → enqueue TASK\_GENERATE\_SINGLE job
 
-\---
+\### Live notes (NestJS + BullMQ reference)
+
+\- **Queue:** **task_queue**. **Bull job name:** **TASK_GENERATE_SINGLE**.
+
+\- **Payload (job.data):** \`type\` = \`TASK_GENERATE_SINGLE\`; \`user_id\` (string ObjectId); \`date\` (YYYY-MM-DD for the IST “today” row); string \`priority\` (e.g. \`medium\`); \`created_at\` (ISO). BullMQ also stores a numeric **priority** on the job (medium tier).
+
+\- **Dedup:** stable Bull \`jobId\` per user + date (e.g. \`task-gen-{userId}-{date}\`) so repeated **GET /tasks/today** does not flood the queue.
+
+\- **API behavior:** The handler still runs the same idempotent personalization path in-process so the **HTTP response** returns today’s tasks immediately; the queue records the fallback for durability and worker-side retries.
+
+\- **Without Redis / workers:** When background jobs are disabled (e.g. \`DISABLE_BULLMQ\` in tests), enqueue is skipped and generation remains API-only.
 
 \---
 
@@ -180,7 +192,9 @@ Update leaderboard collection
 
 \- Avoid full-table scans
 
-\---
+\### Manual refresh (Execution Flow §9)
+
+\- **POST /leaderboard/refresh** (authenticated): recomputes **only** the signed-in user’s **leaderboards** document from **carbon_records** (same aggregation rules as the cron job; upserts zeros if the user has no carbon rows). Does **not** require the cron queue; uses the shared computation service.
 
 \---
 
@@ -252,25 +266,107 @@ Optional optimization:
 
 \# 4. JOB DATA STRUCTURE
 
-Standard job format:
+BullMQ supplies **job.id** (use as \`job\_id\` when writing **job_logs**). The application stores a **logical** \`type\` string and optional fields on **job.data** (and sets Bull numeric **priority** on \`Queue.add\`).
+
+\### Shared shape (illustrative)
 
 \`\`\`json
 
 {
 
-"job\_id": "...",
+  "type": "TASK_RESET | TASK_GENERATE_SINGLE | LEADERBOARD_UPDATE | BADGE_RETRY",
 
-"type": "TASK\_RESET | LEADERBOARD\_UPDATE | BADGE\_RETRY",
+  "priority": "high | medium | low",
 
-"payload": { ... },
+  "created_at": "ISO-8601 timestamp",
 
-"priority": "low | medium | high",
-
-"retry\_count": 0,
-
-"created\_at": "timestamp"
+  "...": "job-specific fields (see below)"
 
 }
+
+\`\`\`
+
+\### TASK\_RESET (cron → task_queue)
+
+\`\`\`json
+
+{
+
+  "type": "TASK_RESET",
+
+  "priority": "high",
+
+  "created_at": "2026-04-12T18:30:00.000Z"
+
+}
+
+\`\`\`
+
+\### TASK\_GENERATE\_SINGLE (GET /tasks/today → task_queue)
+
+\`\`\`json
+
+{
+
+  "type": "TASK_GENERATE_SINGLE",
+
+  "priority": "medium",
+
+  "user_id": "64a1b2c3d4e5f6789012345",
+
+  "date": "2026-04-12",
+
+  "created_at": "2026-04-12T10:15:00.000Z"
+
+}
+
+\`\`\`
+
+\### LEADERBOARD\_UPDATE (cron → leaderboard_queue)
+
+\`\`\`json
+
+{
+
+  "type": "LEADERBOARD_UPDATE",
+
+  "priority": "medium",
+
+  "created_at": "2026-04-12T14:00:00.000Z"
+
+}
+
+\`\`\`
+
+\### BADGE\_RETRY (failure hook → badge_queue)
+
+Aligns with *Error Handling & System Resilience* §6. **trigger_event** selects which evaluator to run; **payload** is the full original event object (same fields as **TASK_EVALUATED** / **STREAK_UPDATED** / **EMISSION\_UPDATED** API events, including \`userId\`).
+
+\`\`\`json
+
+{
+
+  "type": "BADGE_RETRY",
+
+  "trigger_event": "TASK_EVALUATED",
+
+  "payload": {
+
+    "userId": "64a1b2c3d4e5f6789012345",
+
+    "date": "2026-04-12",
+
+    "completedTaskIds": ["eco_reuse"]
+
+  }
+
+}
+
+\`\`\`
+
+\### Persistence note (**job_logs** collection)
+
+The **Complete Database Schema** defines \`job_logs.type\` as \`TASK_RESET | LEADERBOARD | BADGE_RETRY\` (not \`LEADERBOARD_UPDATE\`). Implementations should map Bull job names to that enum when persisting failures (e.g. **LEADERBOARD\_UPDATE** → **LEADERBOARD**).
 
 5\. QUEUE STRATEGY
 ==================
@@ -376,17 +472,27 @@ Tools:
 Midnight Flow
 -------------
 
-CRON↓Dispatch TASK\_RESET\_JOB↓Queue↓Task Worker:→ delete yesterday tasks→ generate today tasks
+CRON → dispatch **TASK_RESET** → **task_queue** → worker: delete yesterday’s **user_daily_tasks** per user → ensure today’s row (personalization engine).
+
+Task fallback (same queue)
+---------------------------
+
+**GET /tasks/today** (no row for today) → dispatch **TASK_GENERATE_SINGLE** → **task_queue** → worker: idempotent **ensure** today’s **user_daily_tasks** (validates \`user_id\` + \`date\` in payload).
 
 Leaderboard Flow
 ----------------
 
-CRON↓Dispatch LEADERBOARD\_JOB↓Queue↓Leaderboard Worker:→ compute averages→ update leaderboard
+CRON → dispatch **LEADERBOARD_UPDATE** → **leaderboard_queue** → worker: aggregate **carbon_records** → upsert **leaderboards**.
+
+Manual leaderboard (API, not queued)
+------------------------------------
+
+**POST /leaderboard/refresh** → same aggregation rules for **one** user (Execution Flow §9).
 
 Badge Retry Flow
 ----------------
 
-Failure Event↓Queue BADGE\_RETRY↓Worker retries badge logic
+In-process badge evaluation throws → enqueue **BADGE_RETRY** on **badge_queue** → worker re-runs evaluation from **job.data** → **user_badges** insert remains idempotent (unique index).
 
 FINAL DEFINITION
 ================

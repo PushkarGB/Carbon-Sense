@@ -127,6 +127,7 @@ function createTasksService(overrides: Partial<Record<string, unknown>>) {
     ((overrides.activityEventsService ?? {
       emitTaskEvaluated: jest.fn(),
     }) as never),
+    (overrides.taskQueue as never) ?? undefined,
   );
 }
 

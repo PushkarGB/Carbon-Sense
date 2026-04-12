@@ -1,5 +1,7 @@
-import { Injectable, Logger, OnApplicationBootstrap } from '@nestjs/common';
+import { InjectQueue } from '@nestjs/bullmq';
+import { Injectable, Logger, OnApplicationBootstrap, Optional } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
+import { Queue } from 'bullmq';
 import { Model, Types } from 'mongoose';
 import {
   ActivityEventsService,
@@ -10,6 +12,12 @@ import {
   TASK_EVALUATED_EVENT,
   TaskEvaluatedEventPayload,
 } from '../activity/activity-events.service';
+import type { BadgeRetryJobData } from '../jobs/badge-retry-job.types';
+import {
+  BADGE_QUEUE_NAME,
+  JOB_NAME_BADGE_RETRY,
+  JOB_PRIORITY_LOW,
+} from '../jobs/queue.constants';
 import { Badge } from '../schemas/badge.schema';
 import { UserBadge } from '../schemas/user-badge.schema';
 import { UserProfile } from '../schemas/user-profile.schema';
@@ -23,6 +31,9 @@ export class BadgeEngineService implements OnApplicationBootstrap {
     @InjectModel('UserBadge') private readonly userBadgeModel: Model<UserBadge>,
     @InjectModel('UserProfile') private readonly userProfileModel: Model<UserProfile>,
     private readonly activityEventsService: ActivityEventsService,
+    @Optional()
+    @InjectQueue(BADGE_QUEUE_NAME)
+    private readonly badgeRetryQueue?: Queue<BadgeRetryJobData>,
   ) {}
 
   onApplicationBootstrap() {
@@ -31,22 +42,66 @@ export class BadgeEngineService implements OnApplicationBootstrap {
 
   private listenToEvents() {
     this.activityEventsService.on(TASK_EVALUATED_EVENT, (payload: TaskEvaluatedEventPayload) => {
-      this.evaluateTaskBadges(payload).catch((err) =>
-        this.logger.error(`Failed to evaluate task badges for user ${payload.userId}`, err),
-      );
+      this.evaluateTaskBadges(payload).catch((err) => {
+        this.logger.error(`Failed to evaluate task badges for user ${payload.userId}`, err);
+        this.enqueueBadgeRetry('TASK_EVALUATED', payload);
+      });
     });
 
     this.activityEventsService.on(STREAK_UPDATED_EVENT, (payload: StreakUpdatedEventPayload) => {
-      this.evaluateStreakBadges(payload).catch((err) =>
-        this.logger.error(`Failed to evaluate streak badges for user ${payload.userId}`, err),
-      );
+      this.evaluateStreakBadges(payload).catch((err) => {
+        this.logger.error(`Failed to evaluate streak badges for user ${payload.userId}`, err);
+        this.enqueueBadgeRetry('STREAK_UPDATED', payload);
+      });
     });
 
     this.activityEventsService.on(EMISSION_UPDATED_EVENT, (payload: EmissionUpdatedEventPayload) => {
-      this.evaluatePerformanceBadges(payload).catch((err) =>
-        this.logger.error(`Failed to evaluate performance badges for user ${payload.userId}`, err),
-      );
+      this.evaluatePerformanceBadges(payload).catch((err) => {
+        this.logger.error(`Failed to evaluate performance badges for user ${payload.userId}`, err);
+        this.enqueueBadgeRetry('EMISSION_UPDATED', payload);
+      });
     });
+  }
+
+  /** BullMQ badge_queue worker entry (Background Job Architecture §3.4). */
+  async processBadgeRetryJob(data: BadgeRetryJobData): Promise<void> {
+    switch (data.trigger_event) {
+      case 'TASK_EVALUATED':
+        await this.evaluateTaskBadges(
+          data.payload as TaskEvaluatedEventPayload,
+        );
+        return;
+      case 'STREAK_UPDATED':
+        await this.evaluateStreakBadges(
+          data.payload as StreakUpdatedEventPayload,
+        );
+        return;
+      case 'EMISSION_UPDATED':
+        await this.evaluatePerformanceBadges(
+          data.payload as EmissionUpdatedEventPayload,
+        );
+        return;
+    }
+  }
+
+  private enqueueBadgeRetry(
+    trigger_event: BadgeRetryJobData['trigger_event'],
+    payload: BadgeRetryJobData['payload'],
+  ): void {
+    if (!this.badgeRetryQueue) {
+      return;
+    }
+    const data: BadgeRetryJobData = {
+      type: 'BADGE_RETRY',
+      trigger_event,
+      payload,
+    };
+    void this.badgeRetryQueue
+      .add(JOB_NAME_BADGE_RETRY, data, {
+        removeOnComplete: true,
+        priority: JOB_PRIORITY_LOW,
+      })
+      .catch((err) => this.logger.error('Failed to enqueue BADGE_RETRY job', err));
   }
 
   private async evaluateTaskBadges(payload: TaskEvaluatedEventPayload) {

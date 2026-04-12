@@ -177,6 +177,8 @@ The stack is optimized for:
 
 \- Background processing
 
+\- **Payload contracts:** example \`job.data\` JSON, **TASK_GENERATE_SINGLE** from **GET /tasks/today**, and **job_logs** vs Bull naming are specified in *CarbonSense — Background Job Architecture (v1)* §4; **BADGE_RETRY** shapes and terminal logging in *CarbonSense — Error Handling & System Resilience (v1.2)* §6.
+
 \---
 
 \## 6. BACKGROUND JOB SYSTEM
@@ -210,6 +212,14 @@ CRON → Dispatcher → Queue → Worker → DB
 \- Retry mechanism (max 3 attempts)
 
 \- Idempotent operations
+
+\### Contract references (read with §5)
+
+\- **Queues and workers:** *CarbonSense — Background Job Architecture (v1)* §2.4, §3, §5 (\`task_queue\`, \`leaderboard_queue\`, \`badge_queue\`; **TASK_RESET** vs **TASK_GENERATE_SINGLE** on \`task_queue\`).
+
+\- **Job data examples:** same document **§4** (includes **LEADERBOARD_UPDATE**, **BADGE_RETRY** with \`trigger_event\` + nested \`payload\`, and the **job_logs.type** note for **LEADERBOARD**).
+
+\- **Failures and recovery:** *CarbonSense — Error Handling & System Resilience (v1.2)* §6 (badge retry JSON), §8 (leaderboard skip + **POST /leaderboard/refresh**), §9 (queue retry policy).
 
 \---
 
@@ -261,11 +271,13 @@ CRON → Dispatcher → Queue → Worker → DB
 
 \- POST /activity/daily
 
-\- GET /tasks/today
+\- GET /tasks/today (when Redis + BullMQ workers are enabled and today’s row is missing, the API enqueues **TASK_GENERATE_SINGLE** on **task_queue** per *Background Job Architecture* §3.2—response still returns today’s tasks)
 
 \- POST /tasks/complete
 
 \- GET /leaderboard
+
+\- POST /leaderboard/refresh (per-user **leaderboards** recompute; *Execution Flow* §9, *Background Job Architecture* §3.3)
 
 \- GET /profile
 
@@ -309,7 +321,7 @@ NestJS Backend (API Layer)
 
 ↓
 
-BullMQ Workers (Async Processing)
+BullMQ Workers (Async Processing) — job contracts in *Background Job Architecture* §4
 
 ↓
 

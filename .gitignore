@@ -155,3 +155,6 @@ mobile/.pub/
 # OS Files
 .DS_Store
 Thumbs.db
+
+# Developer Scripts
+devScripts/

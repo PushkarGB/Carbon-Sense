@@ -352,7 +352,7 @@ Generate today tasks
 
 ## Note — What this API does today
 
-- **Daily and weekly submit** still own **saving the log**, **emissions**, **profile numbers**, and **auto / hybrid task checks** on the server. **Manual task complete** and **awareness “evaluate”** are separate endpoints; they only update **tasks** and **task stats**, not the activity log.
+- **Daily and weekly submit** still own **saving the log**, **emissions**, **profile numbers**, and **auto / hybrid task checks** on the server. **Daily submit** is the only path that writes **`carbon_records`** and updates day-based **performance / leaderboard** numbers. **Weekly submit** still computes an emission estimate, but uses it only to refresh **`user_profiles.weekly_insights`** for insights / personalization. **Manual task complete** and **awareness “evaluate”** are separate endpoints; they only update **tasks** and **task stats**, not the activity log.
 
 - **Streak** is updated on **GET /app/open** (lazy). When the backend is configured with **Redis and BullMQ** (*Background Job Architecture*), **midnight cron** dispatches **TASK_RESET** on **task_queue** (delete yesterday’s `user_daily_tasks` per user, ensure today’s row). **GET /tasks/today** still on-demand creates today’s tasks if missing and, when workers are enabled, may enqueue **TASK_GENERATE_SINGLE** for the same operation. If workers are disabled, rely on **GET /tasks/today** and submit-time generation as in the Daily Task doc, section 17.
 

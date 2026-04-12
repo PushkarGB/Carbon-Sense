@@ -36,15 +36,18 @@ import {
 } from '../jobs/queue.constants';
 import {
   addDaysToYmd,
+  buildBehaviorProfileFromDailyLogs,
   computeAvgEmission7dFromRecords,
-  computeDietNonVegDayFraction,
   computeEmissionTrendFromTotals,
   generateDailyTaskSelection,
+  mergeBehaviorProfileWithWeeklyInsights,
+  type PersonalizationBehaviorProfile,
   type TaskGenerationSignals,
 } from './task-generation.engine';
 import { ErrorLogService } from '../resilience/error-log.service';
 
 type TaskStats = UserProfile['task_stats'];
+type WeeklyInsights = UserProfile['weekly_insights'];
 
 @Injectable()
 export class TasksService {
@@ -512,7 +515,10 @@ export class TasksService {
       todayYmd,
     );
 
-    const behaviorProfile = this.buildBehaviorProfileFromLogs(lastSevenLogs);
+    const behaviorProfile = this.buildTaskGenerationBehaviorProfile(
+      lastSevenLogs,
+      profile.weekly_insights,
+    );
     const chronologicalTotals = [...carbonRecords]
       .reverse()
       .map((r) => r.total_emission);
@@ -614,46 +620,18 @@ export class TasksService {
     return map;
   }
 
-  private buildBehaviorProfileFromLogs(
+  private buildTaskGenerationBehaviorProfile(
     logs: Array<
       Pick<DailyActivityLog, 'eco_actions' | 'electricity' | 'food' | 'transport'>
     >,
-  ): TaskGenerationSignals['behaviorProfile'] {
-    if (logs.length === 0) {
-      return {
-        avg_ac_hours: 0,
-        avg_distance: 0,
-        avg_energy_usage: 0,
-        avg_transport_mode: '',
-        diet_non_veg_day_fraction: 0,
-        eco_action_score: 0,
-      };
-    }
-
-    const transportModeCounts = new Map<string, number>();
-    for (const log of logs) {
-      const mode = log.transport.mode;
-      transportModeCounts.set(mode, (transportModeCounts.get(mode) ?? 0) + 1);
-    }
-    let avgTransportMode = '';
-    let maxCount = -1;
-    for (const [mode, count] of transportModeCounts.entries()) {
-      if (count > maxCount) {
-        avgTransportMode = mode;
-        maxCount = count;
-      }
-    }
-
-    return {
-      avg_ac_hours: average(logs.map((l) => l.electricity.ac_hours)),
-      avg_distance: average(logs.map((l) => l.transport.distance)),
-      avg_energy_usage: average(
-        logs.map((l) => l.electricity.units_consumed),
-      ),
-      avg_transport_mode: avgTransportMode,
-      diet_non_veg_day_fraction: computeDietNonVegDayFraction(logs),
-      eco_action_score: average(logs.map((l) => l.eco_actions.length)),
-    };
+    weeklyInsights: WeeklyInsights | undefined,
+  ): PersonalizationBehaviorProfile {
+    const dailyProfile = buildBehaviorProfileFromDailyLogs(logs);
+    return mergeBehaviorProfileWithWeeklyInsights(
+      dailyProfile,
+      logs.length,
+      weeklyInsights,
+    );
   }
 
   private async calculateTaskCompletionRate(

@@ -376,13 +376,31 @@ describe('ActivityService', () => {
   });
 
   it('completes weekly_input on the documented weekly submission day', async () => {
+    jest.useFakeTimers();
+
     const session = createSession();
     const connection = {
       startSession: jest.fn().mockResolvedValue(session),
     };
     const dailyActivityLogModel = createPersistedModel();
     dailyActivityLogModel.findOne = jest.fn().mockReturnValue(createQuery(null));
-    dailyActivityLogModel.find = jest.fn().mockReturnValue(createQuery([]));
+    dailyActivityLogModel.find = jest
+      .fn()
+      .mockReturnValueOnce(createQuery([]))
+      .mockReturnValueOnce(
+        createQuery([
+          {
+            date: '2026-04-12',
+            eco_actions: ['eco_bag'],
+            electricity: { ac_hours: 1, units_consumed: 5 },
+            food: { diet_type: 'veg', meals_count: 2 },
+            transport: { distance: 2, mode: 'walk' },
+            waste: { bags_used: 1, segregation: true },
+          },
+        ]),
+      )
+      .mockReturnValueOnce(createQuery([]))
+      .mockReturnValueOnce(createQuery([]));
 
     const carbonRecordModel = createPersistedModel();
     carbonRecordModel.find = jest.fn().mockReturnValue(
@@ -464,6 +482,27 @@ describe('ActivityService', () => {
     expect(response.completed_task_ids).toEqual(['weekly_input']);
     expect(response.message).toBe('Weekly activity submitted successfully');
     expect(weeklyTaskDocument.save).toHaveBeenCalledTimes(1);
+    expect(carbonRecordModel).not.toHaveBeenCalled();
+    expect(
+      userProfileModel.updateOne.mock.calls.some((call) => {
+        const payload = call[1] as {
+          $set?: {
+            performance_metrics?: unknown;
+            weekly_insights?: { total_weeks_logged?: number };
+          };
+        };
+        return (
+          JSON.stringify(payload?.$set?.performance_metrics) ===
+            JSON.stringify(createUserProfile().performance_metrics) &&
+          payload?.$set?.weekly_insights?.total_weeks_logged === 1
+        );
+      }),
+    ).toBe(true);
+
+    jest.runAllTimers();
+
+    expect(activityEventsService.emitTaskEvaluated).toHaveBeenCalledTimes(1);
+    expect(activityEventsService.emitEmissionUpdated).not.toHaveBeenCalled();
   });
 });
 
@@ -540,6 +579,19 @@ function createUserProfile(): UserProfile {
       app_open_count: 0,
       task_completion_rate: 0,
       total_days_logged: 1,
+    },
+    weekly_insights: {
+      average_weekly_emission: 0,
+      avg_ac_hours: 0,
+      avg_distance: 0,
+      avg_energy_usage: 0,
+      avg_transport_mode: '',
+      diet_non_veg_day_fraction: 0,
+      eco_action_score: 0,
+      emission_trend: 'stable',
+      last_weekly_submission_date: '1970-01-01',
+      latest_weekly_emission: 0,
+      total_weeks_logged: 0,
     },
     last_streak_update: '1970-01-01',
     last_submission_date: '1970-01-01',

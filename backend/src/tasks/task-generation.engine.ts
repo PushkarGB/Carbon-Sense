@@ -28,6 +28,32 @@ export type EmissionLevelBand = 'low' | 'medium' | 'high';
 
 export type ConsistencyBand = 'low' | 'medium' | 'high';
 
+export interface PersonalizationBehaviorProfile {
+  avg_transport_mode: string;
+  avg_distance: number;
+  avg_ac_hours: number;
+  avg_energy_usage: number;
+  /**
+   * Maps Personalization Engine doc `eco_task_completion_rate` to a v1 proxy: mean count of
+   * `eco_actions` entries per day over the last-7 daily logs (habit frequency, not task DB completion).
+   */
+  eco_action_score: number;
+  /**
+   * See `computeDietNonVegDayFraction`. Feeds diet-aware task matching (Daily Task doc Â§7.2).
+   */
+  diet_non_veg_day_fraction: number;
+}
+
+export interface WeeklyPersonalizationInsights {
+  total_weeks_logged: number;
+  avg_transport_mode: string;
+  avg_distance: number;
+  avg_ac_hours: number;
+  avg_energy_usage: number;
+  eco_action_score: number;
+  diet_non_veg_day_fraction: number;
+}
+
 /**
  * Full user personalization snapshot (Task Personalization Engine v1 §3).
  * Built from signals at generation time.
@@ -137,6 +163,105 @@ export function computeDietNonVegDayFraction(
     }
   }
   return weight / logs.length;
+}
+
+/**
+ * Last-7 daily-log behavior profile used by task personalization.
+ */
+export function buildBehaviorProfileFromDailyLogs(
+  logs: Array<{
+    eco_actions: string[];
+    electricity: { ac_hours: number; units_consumed: number };
+    food: { diet_type: 'veg' | 'non_veg' | 'mixed' };
+    transport: { mode: string; distance: number };
+  }>,
+): PersonalizationBehaviorProfile {
+  if (logs.length === 0) {
+    return {
+      avg_ac_hours: 0,
+      avg_distance: 0,
+      avg_energy_usage: 0,
+      avg_transport_mode: '',
+      diet_non_veg_day_fraction: 0,
+      eco_action_score: 0,
+    };
+  }
+
+  const transportModeCounts = new Map<string, number>();
+  for (const log of logs) {
+    const mode = log.transport.mode;
+    transportModeCounts.set(mode, (transportModeCounts.get(mode) ?? 0) + 1);
+  }
+
+  let avgTransportMode = '';
+  let maxCount = -1;
+  for (const [mode, count] of transportModeCounts.entries()) {
+    if (count > maxCount) {
+      avgTransportMode = mode;
+      maxCount = count;
+    }
+  }
+
+  return {
+    avg_ac_hours: average(logs.map((log) => log.electricity.ac_hours)),
+    avg_distance: average(logs.map((log) => log.transport.distance)),
+    avg_energy_usage: average(
+      logs.map((log) => log.electricity.units_consumed),
+    ),
+    avg_transport_mode: avgTransportMode,
+    diet_non_veg_day_fraction: computeDietNonVegDayFraction(logs),
+    eco_action_score: average(logs.map((log) => log.eco_actions.length)),
+  };
+}
+
+/**
+ * Weekly questionnaire data supplements personalization only when daily history is thin.
+ * This keeps day-based scoring driven by recent daily logs while still making weekly input useful.
+ */
+export function mergeBehaviorProfileWithWeeklyInsights(
+  dailyProfile: PersonalizationBehaviorProfile,
+  dailySampleCount: number,
+  weeklyInsights?: WeeklyPersonalizationInsights | null,
+): PersonalizationBehaviorProfile {
+  if (!weeklyInsights || weeklyInsights.total_weeks_logged === 0) {
+    return dailyProfile;
+  }
+
+  if (dailySampleCount >= 7) {
+    return dailyProfile;
+  }
+
+  const dailyWeight = Math.max(0, Math.min(1, dailySampleCount / 7));
+  const weeklyWeight = 1 - dailyWeight;
+  const weightedAverage = (dailyValue: number, weeklyValue: number): number =>
+    dailyValue * dailyWeight + weeklyValue * weeklyWeight;
+
+  return {
+    avg_ac_hours: weightedAverage(
+      dailyProfile.avg_ac_hours,
+      weeklyInsights.avg_ac_hours,
+    ),
+    avg_distance: weightedAverage(
+      dailyProfile.avg_distance,
+      weeklyInsights.avg_distance,
+    ),
+    avg_energy_usage: weightedAverage(
+      dailyProfile.avg_energy_usage,
+      weeklyInsights.avg_energy_usage,
+    ),
+    avg_transport_mode:
+      dailySampleCount > 0 && dailyProfile.avg_transport_mode !== ''
+        ? dailyProfile.avg_transport_mode
+        : weeklyInsights.avg_transport_mode,
+    diet_non_veg_day_fraction: weightedAverage(
+      dailyProfile.diet_non_veg_day_fraction,
+      weeklyInsights.diet_non_veg_day_fraction,
+    ),
+    eco_action_score: weightedAverage(
+      dailyProfile.eco_action_score,
+      weeklyInsights.eco_action_score,
+    ),
+  };
 }
 
 function percentileRank(sortedAsc: number[], value: number): number {

@@ -59,13 +59,17 @@ Purpose
 
 Core behavioral + aggregated user data
 
- `   {  "user_id": "ObjectId (ref users)",  "onboarding_completed": true,  "streak_days": 0,  "last_submission_date": "YYYY-MM-DD",  "last_streak_update": "YYYY-MM-DD",  "task_stats": {    "eco_action": 0,    "emission_reduction": 0,    "awareness": 0  },  "performance_metrics": {    "baseline_emission": 0,    "baseline_status": "pending | locked",    "current_avg_emission": 0,    "reduction_percent": 0  },  "behavior_profile": {    "avg_transport_mode": "string",    "avg_distance": 0,    "avg_ac_hours": 0,    "avg_energy_usage": 0,    "eco_action_score": 0  },  "engagement_metrics": {    "task_completion_rate": 0,    "total_days_logged": 0,    "app_open_count": 0  },  "created_at": "timestamp",  "updated_at": "timestamp"}   `
+ `   {  "user_id": "ObjectId (ref users)",  "onboarding_completed": true,  "streak_days": 0,  "last_submission_date": "YYYY-MM-DD",  "last_streak_update": "YYYY-MM-DD",  "task_stats": {    "eco_action": 0,    "emission_reduction": 0,    "awareness": 0  },  "performance_metrics": {    "baseline_emission": 0,    "baseline_status": "pending | locked",    "current_avg_emission": 0,    "reduction_percent": 0  },  "behavior_profile": {    "avg_transport_mode": "string",    "avg_distance": 0,    "avg_ac_hours": 0,    "avg_energy_usage": 0,    "eco_action_score": 0  },  "engagement_metrics": {    "task_completion_rate": 0,    "total_days_logged": 0,    "app_open_count": 0  },  "weekly_insights": {    "total_weeks_logged": 0,    "last_weekly_submission_date": "YYYY-MM-DD",    "latest_weekly_emission": 0,    "average_weekly_emission": 0,    "emission_trend": "increasing | stable | decreasing",    "avg_transport_mode": "string",    "avg_distance": 0,    "avg_ac_hours": 0,    "avg_energy_usage": 0,    "eco_action_score": 0,    "diet_non_veg_day_fraction": 0  },  "created_at": "timestamp",  "updated_at": "timestamp"}   `
 
 ### Notes
 
 *   Supports personalization engine signals
     
 *   Stores streak separately (lazy update system)
+
+*   `weekly_insights` is derived from immutable `daily_activity_logs` where `type = weekly`
+
+*   Weekly questionnaire data must **not** create extra `carbon_records` rows or affect leaderboard / daily performance averages
     
 
 4\. COLLECTION: daily\_activity\_logs

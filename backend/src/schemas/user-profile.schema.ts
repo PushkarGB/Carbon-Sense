@@ -45,6 +45,31 @@ const EngagementMetricsSchema = new Schema(
   { _id: false },
 );
 
+const WeeklyInsightsSchema = new Schema(
+  {
+    total_weeks_logged: { type: Number, required: true },
+    last_weekly_submission_date: {
+      type: String,
+      required: true,
+      match: yyyyMmDdPattern,
+    },
+    latest_weekly_emission: { type: Number, required: true },
+    average_weekly_emission: { type: Number, required: true },
+    emission_trend: {
+      type: String,
+      required: true,
+      enum: ['increasing', 'stable', 'decreasing'],
+    },
+    avg_transport_mode: { type: String, required: true },
+    avg_distance: { type: Number, required: true },
+    avg_ac_hours: { type: Number, required: true },
+    avg_energy_usage: { type: Number, required: true },
+    eco_action_score: { type: Number, required: true },
+    diet_non_veg_day_fraction: { type: Number, required: true },
+  },
+  { _id: false },
+);
+
 export interface UserProfile {
   user_id: Types.ObjectId;
   onboarding_completed: boolean;
@@ -74,6 +99,19 @@ export interface UserProfile {
     total_days_logged: number;
     app_open_count: number;
   };
+  weekly_insights: {
+    total_weeks_logged: number;
+    last_weekly_submission_date: string;
+    latest_weekly_emission: number;
+    average_weekly_emission: number;
+    emission_trend: 'increasing' | 'stable' | 'decreasing';
+    avg_transport_mode: string;
+    avg_distance: number;
+    avg_ac_hours: number;
+    avg_energy_usage: number;
+    eco_action_score: number;
+    diet_non_veg_day_fraction: number;
+  };
   created_at: Date;
   updated_at: Date;
 }
@@ -100,6 +138,7 @@ export const UserProfileSchema = new Schema<UserProfile>(
     },
     behavior_profile: { type: BehaviorProfileSchema, required: true },
     engagement_metrics: { type: EngagementMetricsSchema, required: true },
+    weekly_insights: { type: WeeklyInsightsSchema, required: true },
     created_at: { type: Date, required: true },
     updated_at: { type: Date, required: true },
   },

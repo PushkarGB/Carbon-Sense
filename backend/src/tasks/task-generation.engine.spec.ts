@@ -1,6 +1,7 @@
 import { TaskTemplate } from '../schemas/task-template.schema';
 import {
   addDaysToYmd,
+  buildBehaviorProfileFromDailyLogs,
   buildPersonalizationProfile,
   computeAvgEmission7dFromRecords,
   computeConsistencyBand,
@@ -10,6 +11,7 @@ import {
   daysBetweenYmd,
   generateDailyTaskSelection,
   isTaskCoolingDown,
+  mergeBehaviorProfileWithWeeklyInsights,
   shouldIncludeWeeklyInput,
   templateConditionsMet,
   type TaskGenerationSignals,
@@ -214,6 +216,34 @@ describe('task-generation.engine', () => {
     expect(
       computeDietNonVegDayFraction([{ food: { diet_type: 'mixed' } }]),
     ).toBe(0.5);
+  });
+
+  it('uses weekly insights as a fallback when recent daily history is sparse', () => {
+    const merged = mergeBehaviorProfileWithWeeklyInsights(
+      buildBehaviorProfileFromDailyLogs([
+        {
+          eco_actions: [],
+          electricity: { ac_hours: 1, units_consumed: 2 },
+          food: { diet_type: 'veg' as const },
+          transport: { distance: 1, mode: 'walk' },
+        },
+      ]),
+      1,
+      {
+        avg_ac_hours: 6,
+        avg_distance: 14,
+        avg_energy_usage: 12,
+        avg_transport_mode: 'car',
+        diet_non_veg_day_fraction: 0.75,
+        eco_action_score: 3,
+        total_weeks_logged: 2,
+      },
+    );
+
+    expect(merged.avg_ac_hours).toBeGreaterThan(1);
+    expect(merged.avg_energy_usage).toBeGreaterThan(2);
+    expect(merged.avg_transport_mode).toBe('walk');
+    expect(merged.diet_non_veg_day_fraction).toBeGreaterThan(0);
   });
 
   it('templateConditionsMet enforces optional template conditions object', () => {

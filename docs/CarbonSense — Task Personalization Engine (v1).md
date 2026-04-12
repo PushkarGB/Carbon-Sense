@@ -567,3 +567,6 @@ Personalization Engine =Rule-based adaptive task selectorthat evolves into ML-dr
 
 - **User level (section 6)**  
   We use completion rate, streak, emission trend, **and** the streak-based consistency band from section 3.3 together—not the single-line formula alone.
+
+- **Weekly questionnaire influence**  
+  Weekly submissions build a separate **`weekly_insights`** snapshot on the user profile. The live API uses that snapshot only as a **fallback / supplement** when recent daily history is sparse, so weekly reflections help personalization without distorting daily emission history or leaderboard math.

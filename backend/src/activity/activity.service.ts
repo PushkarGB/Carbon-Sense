@@ -26,17 +26,21 @@ import { CreateDailyActivityDto } from './dto/create-daily-activity.dto';
 import { EmissionFactorService } from './emission-factor.service';
 import {
   addDaysToYmd,
+  buildBehaviorProfileFromDailyLogs,
   computeAvgEmission7dFromRecords,
-  computeDietNonVegDayFraction,
   computeEmissionTrendFromTotals,
   generateDailyTaskSelection,
+  mergeBehaviorProfileWithWeeklyInsights,
   shouldIncludeWeeklyInput,
+  type PersonalizationBehaviorProfile,
   type TaskGenerationSignals,
 } from '../tasks/task-generation.engine';
 
 type TaskStats = UserProfile['task_stats'];
 type BehaviorProfile = UserProfile['behavior_profile'];
 type PerformanceMetrics = UserProfile['performance_metrics'];
+type WeeklyInsights = UserProfile['weekly_insights'];
+const UNSET_PROFILE_DATE = '1970-01-01';
 
 @Injectable()
 export class ActivityService {
@@ -191,32 +195,52 @@ export class ActivityService {
         });
       }
 
-      const carbonRecord = new this.carbonRecordModel({
-        breakdown: emissionResult.breakdown,
-        created_at: now,
-        date: dto.date,
-        total_emission: emissionResult.totalEmission,
-        user_id: userId,
-      });
-      await carbonRecord.save({ session });
-
       const dailyLogs = await this.dailyActivityLogModel
         .find({ type: 'daily', user_id: userId })
         .session(session)
         .lean()
         .exec();
-      const carbonRecords = await this.carbonRecordModel
-        .find({ user_id: userId })
-        .sort({ date: 1 })
-        .session(session)
-        .lean()
-        .exec();
+      const weeklyLogs =
+        submissionType === 'weekly'
+          ? await this.dailyActivityLogModel
+              .find({ type: 'weekly', user_id: userId })
+              .sort({ date: 1 })
+              .session(session)
+              .lean()
+              .exec()
+          : [];
+
+      let carbonRecords: CarbonRecord[] = [];
+      if (submissionType === 'daily') {
+        const carbonRecord = new this.carbonRecordModel({
+          breakdown: emissionResult.breakdown,
+          created_at: now,
+          date: dto.date,
+          total_emission: emissionResult.totalEmission,
+          user_id: userId,
+        });
+        await carbonRecord.save({ session });
+
+        carbonRecords = await this.carbonRecordModel
+          .find({ user_id: userId })
+          .sort({ date: 1 })
+          .session(session)
+          .lean()
+          .exec();
+      }
 
       const nextBehaviorProfile = this.buildBehaviorProfile(dailyLogs);
-      const nextPerformanceMetrics = this.buildPerformanceMetrics(
-        userProfile.performance_metrics,
-        carbonRecords,
-      );
+      const nextWeeklyInsights =
+        submissionType === 'weekly'
+          ? this.buildWeeklyInsights(weeklyLogs, emissionFactors)
+          : this.getWeeklyInsightsOrDefault(userProfile.weekly_insights);
+      const nextPerformanceMetrics =
+        submissionType === 'daily'
+          ? this.buildPerformanceMetrics(
+              userProfile.performance_metrics,
+              carbonRecords,
+            )
+          : userProfile.performance_metrics;
 
       const nextEngagementMetrics =
         submissionType === 'daily'
@@ -229,6 +253,7 @@ export class ActivityService {
         behavior_profile: nextBehaviorProfile,
         engagement_metrics: nextEngagementMetrics,
         performance_metrics: nextPerformanceMetrics,
+        weekly_insights: nextWeeklyInsights,
         updated_at: now,
       };
       if (submissionType === 'daily') {
@@ -250,7 +275,7 @@ export class ActivityService {
           emissionResult.totalEmission,
           nextPerformanceMetrics.baseline_emission,
           nextPerformanceMetrics.current_avg_emission,
-          getYesterdayEmission(carbonRecords),
+          submissionType === 'daily' ? getYesterdayEmission(carbonRecords) : 0,
           nextBehaviorProfile,
           userProfile.task_stats,
           session,
@@ -269,6 +294,7 @@ export class ActivityService {
       this.emitPostCommitEvents(
         userId,
         dto.date,
+        submissionType,
         emissionResult,
         completedTaskIds,
       );
@@ -482,7 +508,7 @@ export class ActivityService {
     user: Pick<User, 'created_at'>,
     profile: Pick<
       UserProfile,
-      'engagement_metrics' | 'streak_days' | 'performance_metrics'
+      'engagement_metrics' | 'streak_days' | 'performance_metrics' | 'weekly_insights'
     >,
     session: ClientSession,
   ): Promise<UserDailyTask> {
@@ -545,12 +571,10 @@ export class ActivityService {
       historyDocs,
       todayYmd,
     );
-    const behaviorProfileBase = this.buildBehaviorProfile(lastSevenLogs);
-    const behaviorProfile: TaskGenerationSignals['behaviorProfile'] = {
-      ...behaviorProfileBase,
-      diet_non_veg_day_fraction:
-        computeDietNonVegDayFraction(lastSevenLogs),
-    };
+    const behaviorProfile = this.buildTaskGenerationBehaviorProfile(
+      lastSevenLogs,
+      profile.weekly_insights,
+    );
     const chronologicalTotals = [...recentCarbonRecords]
       .reverse()
       .map((record) => record.total_emission);
@@ -706,6 +730,23 @@ export class ActivityService {
     };
   }
 
+  private buildTaskGenerationBehaviorProfile(
+    dailyLogs: Array<
+      Pick<
+        DailyActivityLog,
+        'eco_actions' | 'electricity' | 'food' | 'transport'
+      >
+    >,
+    weeklyInsights: WeeklyInsights | undefined,
+  ): PersonalizationBehaviorProfile {
+    const dailyProfile = buildBehaviorProfileFromDailyLogs(dailyLogs);
+    return mergeBehaviorProfileWithWeeklyInsights(
+      dailyProfile,
+      dailyLogs.length,
+      weeklyInsights,
+    );
+  }
+
   private buildPerformanceMetrics(
     existingMetrics: PerformanceMetrics,
     carbonRecords: CarbonRecord[],
@@ -733,13 +774,80 @@ export class ActivityService {
         baselineEmission > 0
           ? ((baselineEmission - currentAverageEmission) / baselineEmission) *
             100
-          : 0,
+      : 0,
+    };
+  }
+
+  private buildWeeklyInsights(
+    weeklyLogs: Array<
+      Pick<
+        DailyActivityLog,
+        'date' | 'eco_actions' | 'electricity' | 'food' | 'transport' | 'waste'
+      >
+    >,
+    emissionFactors: Parameters<typeof calculateDailyEmission>[1],
+  ): WeeklyInsights {
+    if (weeklyLogs.length === 0) {
+      return this.getWeeklyInsightsOrDefault(undefined);
+    }
+
+    const behaviorProfile = buildBehaviorProfileFromDailyLogs(weeklyLogs);
+    const weeklyEmissions = weeklyLogs.map((log) =>
+      calculateDailyEmission(
+        {
+          date: log.date,
+          eco_actions: log.eco_actions,
+          electricity: log.electricity,
+          food: log.food,
+          transport: log.transport,
+          waste: log.waste,
+        },
+        emissionFactors,
+      ).totalEmission,
+    );
+    const latestLog = weeklyLogs[weeklyLogs.length - 1];
+
+    return {
+      average_weekly_emission: average(weeklyEmissions),
+      avg_ac_hours: behaviorProfile.avg_ac_hours,
+      avg_distance: behaviorProfile.avg_distance,
+      avg_energy_usage: behaviorProfile.avg_energy_usage,
+      avg_transport_mode: behaviorProfile.avg_transport_mode,
+      diet_non_veg_day_fraction:
+        behaviorProfile.diet_non_veg_day_fraction,
+      eco_action_score: behaviorProfile.eco_action_score,
+      emission_trend: computeEmissionTrendFromTotals(weeklyEmissions),
+      last_weekly_submission_date: latestLog?.date ?? UNSET_PROFILE_DATE,
+      latest_weekly_emission:
+        weeklyEmissions[weeklyEmissions.length - 1] ?? 0,
+      total_weeks_logged: weeklyLogs.length,
+    };
+  }
+
+  private getWeeklyInsightsOrDefault(
+    weeklyInsights: Partial<WeeklyInsights> | undefined,
+  ): WeeklyInsights {
+    return {
+      average_weekly_emission: weeklyInsights?.average_weekly_emission ?? 0,
+      avg_ac_hours: weeklyInsights?.avg_ac_hours ?? 0,
+      avg_distance: weeklyInsights?.avg_distance ?? 0,
+      avg_energy_usage: weeklyInsights?.avg_energy_usage ?? 0,
+      avg_transport_mode: weeklyInsights?.avg_transport_mode ?? '',
+      diet_non_veg_day_fraction:
+        weeklyInsights?.diet_non_veg_day_fraction ?? 0,
+      eco_action_score: weeklyInsights?.eco_action_score ?? 0,
+      emission_trend: weeklyInsights?.emission_trend ?? 'stable',
+      last_weekly_submission_date:
+        weeklyInsights?.last_weekly_submission_date ?? UNSET_PROFILE_DATE,
+      latest_weekly_emission: weeklyInsights?.latest_weekly_emission ?? 0,
+      total_weeks_logged: weeklyInsights?.total_weeks_logged ?? 0,
     };
   }
 
   private emitPostCommitEvents(
     userId: Types.ObjectId,
     date: string,
+    submissionType: 'daily' | 'weekly',
     emissionResult: {
       breakdown: {
         transport: number;
@@ -758,12 +866,14 @@ export class ActivityService {
           date,
           userId: userId.toString(),
         });
-        this.activityEventsService.emitEmissionUpdated({
-          breakdown: emissionResult.breakdown,
-          date,
-          totalEmission: emissionResult.totalEmission,
-          userId: userId.toString(),
-        });
+        if (submissionType === 'daily') {
+          this.activityEventsService.emitEmissionUpdated({
+            breakdown: emissionResult.breakdown,
+            date,
+            totalEmission: emissionResult.totalEmission,
+            userId: userId.toString(),
+          });
+        }
       } catch (error) {
         void this.errorLogService.logFailure({
           type: 'NON_CRITICAL',

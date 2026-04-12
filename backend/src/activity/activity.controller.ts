@@ -19,4 +19,12 @@ export class ActivityController {
   ) {
     return this.activityService.submitDailyActivity(req.user._id, dto);
   }
+
+  @Post('weekly')
+  submitWeeklyActivity(
+    @Req() req: RequestWithUser,
+    @Body() dto: CreateDailyActivityDto,
+  ) {
+    return this.activityService.submitWeeklyActivity(req.user._id, dto);
+  }
 }

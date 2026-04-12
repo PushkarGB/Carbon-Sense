@@ -48,6 +48,7 @@ describe('activity logic', () => {
 
   it('evaluates the finalized submission-time task rules', () => {
     const baseContext = {
+      submissionType: 'daily' as const,
       activity: {
         date: '2026-04-12',
         eco_actions: [],
@@ -73,6 +74,7 @@ describe('activity logic', () => {
       latestEmission: 10,
       profileAverageAcHours: 4,
       profileAverageDistance: 8,
+      profileAverageWalkDistance: 3,
       recentVehicleDistanceAverage: 6,
       yesterdayEmission: 11,
     };
@@ -152,6 +154,7 @@ describe('activity logic', () => {
 
   it('does not complete guarded tasks when their documented baselines are missing', () => {
     const context = {
+      submissionType: 'daily' as const,
       activity: {
         date: '2026-04-12',
         eco_actions: [],
@@ -177,9 +180,17 @@ describe('activity logic', () => {
       latestEmission: 6,
       profileAverageAcHours: 2,
       profileAverageDistance: 2,
+      profileAverageWalkDistance: 5,
       recentVehicleDistanceAverage: 0,
       yesterdayEmission: 0,
     };
+
+    expect(
+      evaluateTaskCompletion(
+        { completion_type: 'hybrid', task_id: 'transport_walk' },
+        context,
+      ),
+    ).toBe(false);
 
     expect(
       evaluateTaskCompletion(
@@ -203,6 +214,53 @@ describe('activity logic', () => {
       evaluateTaskCompletion(
         { completion_type: 'hybrid', task_id: 'short_trip_replace' },
         context,
+      ),
+    ).toBe(false);
+  });
+
+  it('completes only weekly_input for weekly submissions', () => {
+    const weeklyContext = {
+      submissionType: 'weekly' as const,
+      activity: {
+        date: '2026-04-12',
+        eco_actions: [],
+        electricity: {
+          ac_hours: 1,
+          units_consumed: 2,
+        },
+        food: {
+          diet_type: 'veg' as const,
+          meals_count: 2,
+        },
+        transport: {
+          distance: 1,
+          mode: 'walk' as const,
+        },
+        waste: {
+          bags_used: 0,
+          segregation: true,
+        },
+      },
+      baselineEmission: 0,
+      currentAverageEmission: 0,
+      latestEmission: 0,
+      profileAverageAcHours: 0,
+      profileAverageDistance: 0,
+      profileAverageWalkDistance: 0,
+      recentVehicleDistanceAverage: 0,
+      yesterdayEmission: 0,
+    };
+
+    expect(
+      evaluateTaskCompletion(
+        { completion_type: 'auto', task_id: 'weekly_input' },
+        weeklyContext,
+      ),
+    ).toBe(true);
+    expect(
+      evaluateTaskCompletion(
+        { completion_type: 'auto', task_id: 'daily_input' },
+        weeklyContext,
       ),
     ).toBe(false);
   });

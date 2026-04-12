@@ -6,6 +6,7 @@ import { EmissionFactorSchema } from '../schemas/emission-factor.schema';
 import { TaskTemplateSchema } from '../schemas/task-template.schema';
 import { UserDailyTaskSchema } from '../schemas/user-daily-task.schema';
 import { UserProfileSchema } from '../schemas/user-profile.schema';
+import { UserSchema } from '../schemas/user.schema';
 import { ActivityController } from './activity.controller';
 import { ActivityEventsService } from './activity-events.service';
 import { ActivityService } from './activity.service';
@@ -21,6 +22,7 @@ import { RedisCacheService } from './redis-cache.service';
       { name: 'TaskTemplate', schema: TaskTemplateSchema },
       { name: 'UserDailyTask', schema: UserDailyTaskSchema },
       { name: 'UserProfile', schema: UserProfileSchema },
+      { name: 'User', schema: UserSchema },
     ]),
   ],
   controllers: [ActivityController],

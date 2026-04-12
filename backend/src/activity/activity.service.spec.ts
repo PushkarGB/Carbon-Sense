@@ -17,6 +17,152 @@ describe('ActivityService', () => {
     jest.clearAllMocks();
   });
 
+  it('generates today’s tasks on-demand before evaluating a daily submission', async () => {
+    const session = createSession();
+    const connection = {
+      startSession: jest.fn().mockResolvedValue(session),
+    };
+
+    const generatedTaskDocument = {
+      date: '2026-04-12',
+      save: jest.fn().mockResolvedValue(undefined),
+      tasks: [
+        {
+          category: 'system',
+          completed_at: null,
+          completion_type: 'auto',
+          status: 'pending',
+          task_id: 'daily_input',
+        },
+        {
+          category: 'eco_action',
+          completed_at: null,
+          completion_type: 'manual',
+          status: 'pending',
+          task_id: 'eco_bag',
+        },
+        {
+          category: 'emission_reduction',
+          completed_at: null,
+          completion_type: 'auto',
+          status: 'pending',
+          task_id: 'transport_public',
+        },
+        {
+          category: 'awareness',
+          completed_at: null,
+          completion_type: 'auto',
+          status: 'pending',
+          task_id: 'check_aqi',
+        },
+      ],
+      user_id: new Types.ObjectId(),
+    };
+
+    const dailyActivityLogModel = createPersistedModel();
+    dailyActivityLogModel.findOne = jest.fn().mockReturnValue(createQuery(null));
+    dailyActivityLogModel.find = jest
+      .fn()
+      .mockReturnValueOnce(createQuery([]))
+      .mockReturnValueOnce(
+        createQuery([
+          {
+            eco_actions: ['eco_bag'],
+            electricity: { ac_hours: 1, units_consumed: 5 },
+            food: { diet_type: 'veg', meals_count: 2 },
+            transport: { distance: 2, mode: 'walk' },
+            waste: { bags_used: 1, segregation: true },
+          },
+        ]),
+      )
+      .mockReturnValueOnce(createQuery([]));
+
+    const carbonRecordModel = createPersistedModel();
+    carbonRecordModel.find = jest
+      .fn()
+      .mockReturnValueOnce(createQuery([]))
+      .mockReturnValueOnce(createQuery([createCarbonRecord('2026-04-12', 7)]));
+
+    const userDailyTaskModelCtor = createPersistedModel();
+    const userDailyTaskModel = userDailyTaskModelCtor as typeof userDailyTaskModelCtor & {
+      find: jest.Mock;
+      findOne: jest.Mock;
+    };
+    userDailyTaskModel.findOne = jest
+      .fn()
+      .mockReturnValueOnce(createQuery(null))
+      .mockReturnValueOnce(createQuery(null))
+      .mockReturnValueOnce(createQuery(generatedTaskDocument));
+    userDailyTaskModel.find = jest
+      .fn()
+      .mockReturnValueOnce(createQuery([]))
+      .mockReturnValueOnce(createQuery([generatedTaskDocument]));
+
+    const userModel = {
+      findById: jest.fn().mockReturnValue(createQuery(createUser())),
+    };
+    const userProfileModel = {
+      findOne: jest.fn().mockReturnValue(createQuery(createUserProfile())),
+      updateOne: jest.fn().mockResolvedValue(undefined),
+    };
+    const taskTemplateModel = {
+      find: jest
+        .fn()
+        .mockReturnValueOnce(createQuery(createTaskTemplates()))
+        .mockReturnValueOnce(
+          createQuery([
+            createTaskTemplate({
+              category: 'system',
+              completion_type: 'auto',
+              task_id: 'daily_input',
+            }),
+            createTaskTemplate({
+              category: 'emission_reduction',
+              completion_type: 'auto',
+              task_id: 'transport_public',
+            }),
+            createTaskTemplate({
+              category: 'awareness',
+              completion_type: 'auto',
+              task_id: 'check_aqi',
+            }),
+          ]),
+        ),
+    };
+    const activityEventsService = createActivityEventsService();
+    const emissionFactorService = {
+      getEmissionFactors: jest.fn().mockResolvedValue({
+        electricity: 0.71,
+        transport_bike: 0.02,
+        transport_bus: 0.08,
+        transport_car: 0.12,
+        transport_metro: 0.03,
+        transport_walk: 0,
+      }),
+    };
+
+    const service = new ActivityService(
+      connection as never,
+      carbonRecordModel as never,
+      dailyActivityLogModel as never,
+      taskTemplateModel as never,
+      userDailyTaskModel as never,
+      userModel as never,
+      userProfileModel as never,
+      activityEventsService as unknown as ActivityEventsService,
+      emissionFactorService as unknown as EmissionFactorService,
+    );
+
+    const response = await service.submitDailyActivity(
+      new Types.ObjectId(),
+      createActivityDto(),
+    );
+
+    expect(response.completed_task_ids).toContain('daily_input');
+    expect(userDailyTaskModelCtor).toHaveBeenCalledTimes(1);
+    expect(generatedTaskDocument.save).toHaveBeenCalledTimes(1);
+  });
+
   it('aborts the transaction and rolls back when factor fetch fails', async () => {
     const session = createSession();
     const connection = {
@@ -30,12 +176,24 @@ describe('ActivityService', () => {
       .fn()
       .mockReturnValueOnce(createQuery([]));
     const carbonRecordModel = createPersistedModel();
+    const userModel = {
+      findById: jest.fn().mockReturnValue(createQuery(createUser())),
+    };
     const userProfileModel = {
       findOne: jest.fn().mockReturnValue(createQuery(createUserProfile())),
       updateOne: jest.fn(),
     };
     const taskTemplateModel = { find: jest.fn() };
-    const userDailyTaskModel = { find: jest.fn(), findOne: jest.fn() };
+    const userDailyTaskModel = {
+      find: jest.fn(),
+      findOne: jest.fn().mockReturnValue(
+        createQuery({
+          date: '2026-04-12',
+          tasks: [],
+          user_id: new Types.ObjectId(),
+        }),
+      ),
+    };
     const activityEventsService = createActivityEventsService();
     const emissionFactorService = {
       getEmissionFactors: jest.fn().mockRejectedValue(
@@ -51,6 +209,7 @@ describe('ActivityService', () => {
       dailyActivityLogModel as never,
       taskTemplateModel as never,
       userDailyTaskModel as never,
+      userModel as never,
       userProfileModel as never,
       activityEventsService as unknown as ActivityEventsService,
       emissionFactorService as unknown as EmissionFactorService,
@@ -105,6 +264,9 @@ describe('ActivityService', () => {
     carbonRecordModel.find = jest.fn().mockReturnValue(
       createQuery(carbonRecordsAfterSave),
     );
+    const userModel = {
+      findById: jest.fn().mockReturnValue(createQuery(createUser())),
+    };
 
     const userDailyTaskDocument = {
       date: '2026-04-12',
@@ -165,6 +327,7 @@ describe('ActivityService', () => {
       dailyActivityLogModel as never,
       taskTemplateModel as never,
       userDailyTaskModel as never,
+      userModel as never,
       userProfileModel as never,
       activityEventsService as unknown as ActivityEventsService,
       emissionFactorService as unknown as EmissionFactorService,
@@ -194,6 +357,93 @@ describe('ActivityService', () => {
     ).toBeLessThan(
       activityEventsService.emitEmissionUpdated.mock.invocationCallOrder[0],
     );
+  });
+
+  it('completes weekly_input on the documented weekly submission day', async () => {
+    const session = createSession();
+    const connection = {
+      startSession: jest.fn().mockResolvedValue(session),
+    };
+    const dailyActivityLogModel = createPersistedModel();
+    dailyActivityLogModel.findOne = jest.fn().mockReturnValue(createQuery(null));
+    dailyActivityLogModel.find = jest.fn().mockReturnValue(createQuery([]));
+
+    const carbonRecordModel = createPersistedModel();
+    carbonRecordModel.find = jest.fn().mockReturnValue(
+      createQuery([createCarbonRecord('2026-04-12', 6)]),
+    );
+
+    const weeklyTaskDocument = {
+      date: '2026-04-12',
+      save: jest.fn().mockResolvedValue(undefined),
+      tasks: [
+        {
+          category: 'system',
+          completed_at: null,
+          completion_type: 'auto',
+          status: 'pending',
+          task_id: 'weekly_input',
+        },
+      ],
+      user_id: new Types.ObjectId(),
+    };
+    const userDailyTaskModel = {
+      find: jest.fn().mockReturnValue(createQuery([weeklyTaskDocument])),
+      findOne: jest.fn().mockReturnValue(createQuery(weeklyTaskDocument)),
+    };
+    const userModel = {
+      findById: jest.fn().mockReturnValue(
+        createQuery(createUser('2026-04-05T00:00:00.000Z')),
+      ),
+    };
+    const userProfileModel = {
+      findOne: jest.fn().mockReturnValue(createQuery(createUserProfile())),
+      updateOne: jest.fn().mockResolvedValue(undefined),
+    };
+    const taskTemplateModel = {
+      find: jest.fn().mockReturnValue(
+        createQuery([
+          createTaskTemplate({
+            category: 'system',
+            completion_type: 'auto',
+            evaluation_logic: 'weekly_submission_exists',
+            task_id: 'weekly_input',
+          }),
+        ]),
+      ),
+    };
+    const activityEventsService = createActivityEventsService();
+    const emissionFactorService = {
+      getEmissionFactors: jest.fn().mockResolvedValue({
+        electricity: 0.71,
+        transport_bike: 0.02,
+        transport_bus: 0.08,
+        transport_car: 0.12,
+        transport_metro: 0.03,
+        transport_walk: 0,
+      }),
+    };
+
+    const service = new ActivityService(
+      connection as never,
+      carbonRecordModel as never,
+      dailyActivityLogModel as never,
+      taskTemplateModel as never,
+      userDailyTaskModel as never,
+      userModel as never,
+      userProfileModel as never,
+      activityEventsService as unknown as ActivityEventsService,
+      emissionFactorService as unknown as EmissionFactorService,
+    );
+
+    const response = await service.submitWeeklyActivity(
+      new Types.ObjectId(),
+      createActivityDto(),
+    );
+
+    expect(response.completed_task_ids).toEqual(['weekly_input']);
+    expect(response.message).toBe('Weekly activity submitted successfully');
+    expect(weeklyTaskDocument.save).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -288,6 +538,88 @@ function createUserProfile(): UserProfile {
     },
     updated_at: new Date('2026-04-01T00:00:00.000Z'),
     user_id: new Types.ObjectId(),
+  };
+}
+
+function createUser(createdAt = '2026-04-01T00:00:00.000Z') {
+  return {
+    _id: new Types.ObjectId(),
+    city: 'Kolkata',
+    created_at: new Date(createdAt),
+    email: 'user@example.com',
+    name: 'Carbon User',
+    password_hash: 'hash',
+    profile_picture_url: 'https://example.com/avatar.png',
+    role: 'student' as const,
+    updated_at: new Date(createdAt),
+  };
+}
+
+function createTaskTemplates() {
+  return [
+    createTaskTemplate({
+      category: 'system',
+      completion_type: 'auto',
+      evaluation_logic: 'daily_submission_exists',
+      priority: 1,
+      task_id: 'daily_input',
+    }),
+    createTaskTemplate({
+      category: 'system',
+      completion_type: 'auto',
+      evaluation_logic: 'weekly_submission_exists',
+      priority: 1,
+      task_id: 'weekly_input',
+    }),
+    createTaskTemplate({
+      cooldown_days: 2,
+      task_id: 'eco_bag',
+    }),
+    createTaskTemplate({
+      category: 'emission_reduction',
+      completion_type: 'auto',
+      evaluation_logic: 'transport_mode == public',
+      priority: 5,
+      task_id: 'transport_public',
+    }),
+    createTaskTemplate({
+      category: 'awareness',
+      completion_type: 'auto',
+      evaluation_logic: 'aqi_screen_viewed',
+      priority: 1,
+      task_id: 'check_aqi',
+    }),
+  ];
+}
+
+function createTaskTemplate(
+  partial: Partial<{
+    active: boolean;
+    category: 'system' | 'eco_action' | 'emission_reduction' | 'awareness';
+    completion_type: 'auto' | 'manual' | 'hybrid';
+    conditions: Record<string, unknown>;
+    cooldown_days: number;
+    description: string;
+    evaluation_logic: string | null;
+    priority: number;
+    task_id: string;
+    title: string;
+  }> &
+    {
+      task_id: string;
+    },
+) {
+  return {
+    active: true,
+    category: 'eco_action' as const,
+    completion_type: 'manual' as const,
+    conditions: {},
+    cooldown_days: 0,
+    description: 'Task description',
+    evaluation_logic: null,
+    priority: 2,
+    title: 'Task title',
+    ...partial,
   };
 }
 

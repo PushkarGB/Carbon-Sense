@@ -11,6 +11,7 @@ import { DailyActivityLog } from '../schemas/daily-activity-log.schema';
 import { TaskTemplate } from '../schemas/task-template.schema';
 import { UserDailyTask } from '../schemas/user-daily-task.schema';
 import { UserProfile } from '../schemas/user-profile.schema';
+import { User } from '../schemas/user.schema';
 import {
   ActivityInput,
   calculateDailyEmission,
@@ -21,6 +22,13 @@ import {
 import { ActivityEventsService } from './activity-events.service';
 import { CreateDailyActivityDto } from './dto/create-daily-activity.dto';
 import { EmissionFactorService } from './emission-factor.service';
+import {
+  addDaysToYmd,
+  computeEmissionTrendFromTotals,
+  generateDailyTaskSelection,
+  type TaskGenerationSignals,
+  shouldIncludeWeeklyInput,
+} from '../tasks/task-generation.engine';
 
 type TaskStats = UserProfile['task_stats'];
 type BehaviorProfile = UserProfile['behavior_profile'];
@@ -38,6 +46,7 @@ export class ActivityService {
     private readonly taskTemplateModel: Model<TaskTemplate>,
     @InjectModel('UserDailyTask')
     private readonly userDailyTaskModel: Model<UserDailyTask>,
+    @InjectModel('User') private readonly userModel: Model<User>,
     @InjectModel('UserProfile')
     private readonly userProfileModel: Model<UserProfile>,
     private readonly activityEventsService: ActivityEventsService,
@@ -47,6 +56,21 @@ export class ActivityService {
   async submitDailyActivity(
     userId: Types.ObjectId,
     dto: CreateDailyActivityDto,
+  ) {
+    return this.submitActivity(userId, dto, 'daily');
+  }
+
+  async submitWeeklyActivity(
+    userId: Types.ObjectId,
+    dto: CreateDailyActivityDto,
+  ) {
+    return this.submitActivity(userId, dto, 'weekly');
+  }
+
+  private async submitActivity(
+    userId: Types.ObjectId,
+    dto: CreateDailyActivityDto,
+    submissionType: 'daily' | 'weekly',
   ): Promise<{
     message: string;
     carbon_record: {
@@ -61,7 +85,7 @@ export class ActivityService {
     };
     completed_task_ids: string[];
   }> {
-    this.validateDailyInput(dto);
+    this.validateActivityInput(dto);
     const activityInput = dto as ActivityInput;
 
     const session = await this.connection.startSession();
@@ -69,10 +93,18 @@ export class ActivityService {
     try {
       session.startTransaction();
 
+      const user = await this.userModel.findById(userId).session(session).exec();
+      if (!user) {
+        throw new InternalServerErrorException({
+          error: 'USER_NOT_FOUND',
+          message: 'User not found',
+        });
+      }
+
       const existingLog = await this.dailyActivityLogModel
         .findOne({
           date: dto.date,
-          type: 'daily',
+          type: submissionType,
           user_id: userId,
         })
         .session(session)
@@ -81,8 +113,14 @@ export class ActivityService {
 
       if (existingLog) {
         throw new ConflictException({
-          error: 'ALREADY_SUBMITTED',
-          message: 'Daily activity already submitted',
+          error:
+            submissionType === 'daily'
+              ? 'ALREADY_SUBMITTED'
+              : 'WEEKLY_ALREADY_SUBMITTED',
+          message:
+            submissionType === 'daily'
+              ? 'Daily activity already submitted'
+              : 'Weekly activity already submitted',
         });
       }
 
@@ -98,6 +136,27 @@ export class ActivityService {
         });
       }
 
+      if (
+        submissionType === 'weekly' &&
+        !shouldIncludeWeeklyInput(
+          dto.date,
+          getDateStringInTimeZone(user.created_at, INDIA_TIME_ZONE),
+        )
+      ) {
+        throw new BadRequestException({
+          error: 'WEEKLY_SUBMISSION_NOT_AVAILABLE',
+          message: 'Weekly activity is available only on the documented weekly unlock day',
+        });
+      }
+
+      await this.ensureGeneratedDailyTasks(
+        userId,
+        dto.date,
+        user,
+        userProfile,
+        session,
+      );
+
       const now = new Date();
       const activityLog = new this.dailyActivityLogModel({
         created_at: now,
@@ -106,7 +165,7 @@ export class ActivityService {
         electricity: dto.electricity,
         food: dto.food,
         transport: dto.transport,
-        type: 'daily',
+        type: submissionType,
         user_id: userId,
         waste: dto.waste,
       });
@@ -146,26 +205,33 @@ export class ActivityService {
         carbonRecords,
       );
 
-      await this.userProfileModel.updateOne(
-        { _id: userProfile._id },
-        {
-          $set: {
-            behavior_profile: nextBehaviorProfile,
-            engagement_metrics: {
+      const nextEngagementMetrics =
+        submissionType === 'daily'
+          ? {
               ...userProfile.engagement_metrics,
               total_days_logged: dailyLogs.length,
-            },
-            last_submission_date: dto.date,
-            performance_metrics: nextPerformanceMetrics,
-            updated_at: now,
-          },
-        },
+            }
+          : userProfile.engagement_metrics;
+      const profileUpdate: Record<string, unknown> = {
+        behavior_profile: nextBehaviorProfile,
+        engagement_metrics: nextEngagementMetrics,
+        performance_metrics: nextPerformanceMetrics,
+        updated_at: now,
+      };
+      if (submissionType === 'daily') {
+        profileUpdate.last_submission_date = dto.date;
+      }
+
+      await this.userProfileModel.updateOne(
+        { _id: userProfile._id },
+        { $set: profileUpdate },
         { session },
       );
 
       const completedTaskIds = await this.evaluateTasks(
         userId,
         activityInput,
+        submissionType,
         emissionResult.totalEmission,
         nextPerformanceMetrics.baseline_emission,
         nextPerformanceMetrics.current_avg_emission,
@@ -190,7 +256,10 @@ export class ActivityService {
           total_emission: emissionResult.totalEmission,
         },
         completed_task_ids: completedTaskIds,
-        message: 'Daily activity submitted successfully',
+        message:
+          submissionType === 'daily'
+            ? 'Daily activity submitted successfully'
+            : 'Weekly activity submitted successfully',
       };
     } catch (error) {
       await session.abortTransaction();
@@ -200,13 +269,13 @@ export class ActivityService {
     }
   }
 
-  private validateDailyInput(dto: CreateDailyActivityDto): void {
+  private validateActivityInput(dto: CreateDailyActivityDto): void {
     const today = getDateStringInTimeZone(new Date(), INDIA_TIME_ZONE);
 
     if (dto.date !== today) {
       throw new BadRequestException({
         error: 'INVALID_SUBMISSION_DATE',
-        message: 'Daily activity date must match today',
+        message: 'Activity submission date must match today',
       });
     }
   }
@@ -214,6 +283,7 @@ export class ActivityService {
   private async evaluateTasks(
     userId: Types.ObjectId,
     activity: ActivityInput,
+    submissionType: 'daily' | 'weekly',
     latestEmission: number,
     baselineEmission: number,
     currentAverageEmission: number,
@@ -279,6 +349,7 @@ export class ActivityService {
       }
 
       const isCompleted = evaluateTaskCompletion(template, {
+        submissionType,
         activity,
         baselineEmission,
         currentAverageEmission,
@@ -349,6 +420,152 @@ export class ActivityService {
     return average(
       recentVehicleLogs.map((log) => log.transport.distance),
     );
+  }
+
+  private async ensureGeneratedDailyTasks(
+    userId: Types.ObjectId,
+    todayYmd: string,
+    user: Pick<User, 'created_at'>,
+    profile: Pick<UserProfile, 'engagement_metrics' | 'streak_days'>,
+    session: ClientSession,
+  ): Promise<UserDailyTask> {
+    const existing = await this.userDailyTaskModel
+      .findOne({ date: todayYmd, user_id: userId })
+      .session(session)
+      .exec();
+    if (existing) {
+      return existing;
+    }
+
+    const templates = await this.taskTemplateModel
+      .find({ active: true })
+      .session(session)
+      .lean()
+      .exec();
+    if (templates.length === 0) {
+      throw new InternalServerErrorException({
+        error: 'TASK_TEMPLATES_EMPTY',
+        message: 'Task templates are not configured',
+      });
+    }
+
+    const yesterdayYmd = addDaysToYmd(todayYmd, -1);
+    const [yesterdayDoc, historyDocs, lastSevenLogs, recentCarbonRecords] =
+      await Promise.all([
+        this.userDailyTaskModel
+          .findOne({ date: yesterdayYmd, user_id: userId })
+          .session(session)
+          .lean()
+          .exec(),
+        this.userDailyTaskModel
+          .find({
+            date: { $gte: addDaysToYmd(todayYmd, -120) },
+            user_id: userId,
+          })
+          .session(session)
+          .lean()
+          .exec(),
+        this.dailyActivityLogModel
+          .find({ type: 'daily', user_id: userId })
+          .sort({ date: -1 })
+          .limit(7)
+          .session(session)
+          .lean()
+          .exec(),
+        this.carbonRecordModel
+          .find({ user_id: userId })
+          .sort({ date: -1 })
+          .limit(14)
+          .session(session)
+          .lean()
+          .exec(),
+      ]);
+
+    const yesterdayTaskIds = new Set(
+      (yesterdayDoc?.tasks ?? []).map((task) => task.task_id),
+    );
+    const lastCompletionYmdByTaskId = this.buildLastCompletionMap(
+      historyDocs,
+      todayYmd,
+    );
+    const behaviorProfile = this.buildBehaviorProfile(lastSevenLogs);
+    const emissionTrend = computeEmissionTrendFromTotals(
+      [...recentCarbonRecords]
+        .reverse()
+        .map((record) => record.total_emission),
+    );
+
+    const selection = generateDailyTaskSelection({
+      behaviorProfile,
+      emissionTrend,
+      lastCompletionYmdByTaskId,
+      relaxCooldown: false,
+      streakDays: profile.streak_days,
+      taskCompletionRate: profile.engagement_metrics.task_completion_rate,
+      templates: templates as TaskTemplate[],
+      todayYmd,
+      userRegisteredYmd: getDateStringInTimeZone(
+        user.created_at,
+        INDIA_TIME_ZONE,
+      ),
+      yesterdayTaskIds,
+    } satisfies TaskGenerationSignals);
+
+    const createdAt = new Date();
+    const doc = new this.userDailyTaskModel({
+      created_at: createdAt,
+      date: todayYmd,
+      tasks: selection.map((row) => ({
+        category: row.category,
+        completed_at: null,
+        completion_type: row.completion_type,
+        status: 'pending' as const,
+        task_id: row.task_id,
+      })),
+      user_id: userId,
+    });
+
+    try {
+      await doc.save({ session });
+      return doc;
+    } catch (error: unknown) {
+      const code =
+        error && typeof error === 'object' && 'code' in error
+          ? (error as { code?: number | string }).code
+          : undefined;
+      if (code === 11_000 || code === '11000') {
+        const raced = await this.userDailyTaskModel
+          .findOne({ date: todayYmd, user_id: userId })
+          .session(session)
+          .exec();
+        if (raced) {
+          return raced;
+        }
+      }
+      throw error;
+    }
+  }
+
+  private buildLastCompletionMap(
+    docs: Array<{ date: string; tasks: UserDailyTask['tasks'] }>,
+    todayYmd: string,
+  ): Map<string, string> {
+    const map = new Map<string, string>();
+    for (const doc of docs) {
+      if (doc.date >= todayYmd) {
+        continue;
+      }
+      for (const task of doc.tasks) {
+        if (task.status !== 'completed') {
+          continue;
+        }
+        const previous = map.get(task.task_id);
+        if (!previous || doc.date > previous) {
+          map.set(task.task_id, doc.date);
+        }
+      }
+    }
+    return map;
   }
 
   private async calculateTaskCompletionRate(

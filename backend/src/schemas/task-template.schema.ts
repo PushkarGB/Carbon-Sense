@@ -2,6 +2,8 @@ import { Schema } from 'mongoose';
 
 const stringOrNull = (value: unknown): boolean =>
   value === null || typeof value === 'string';
+const isInteger = (value: unknown): boolean =>
+  typeof value === 'number' && Number.isInteger(value);
 
 export interface TaskTemplate {
   task_id: string;
@@ -39,8 +41,23 @@ export const TaskTemplateSchema = new Schema<TaskTemplate>(
       },
     },
     conditions: { type: Schema.Types.Mixed, required: true },
-    cooldown_days: { type: Number, required: true },
-    priority: { type: Number, required: true },
+    cooldown_days: {
+      type: Number,
+      required: true,
+      min: 0,
+      validate: {
+        validator: isInteger,
+      },
+    },
+    priority: {
+      type: Number,
+      required: true,
+      min: 1,
+      max: 5,
+      validate: {
+        validator: isInteger,
+      },
+    },
     active: { type: Boolean, required: true },
   },
   {

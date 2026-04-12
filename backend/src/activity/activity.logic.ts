@@ -67,6 +67,7 @@ export interface EmissionCalculationResult {
 }
 
 export interface TaskEvaluationContext {
+  submissionType: 'daily' | 'weekly';
   activity: ActivityInput;
   baselineEmission: number;
   currentAverageEmission: number;
@@ -131,9 +132,15 @@ export function evaluateTaskCompletion(
     return false;
   }
 
+  if (context.submissionType === 'weekly') {
+    return task.task_id === 'weekly_input';
+  }
+
   switch (task.task_id) {
     case 'daily_input':
       return true;
+    case 'weekly_input':
+      return false;
     case 'transport_public':
       return (
         context.activity.transport.mode === 'bus' ||

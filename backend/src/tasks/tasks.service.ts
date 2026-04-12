@@ -9,6 +9,7 @@ import { InjectConnection, InjectModel } from '@nestjs/mongoose';
 import { ClientSession, Connection, Model, Types } from 'mongoose';
 import { ActivityEventsService } from '../activity/activity-events.service';
 import {
+  evaluateTaskCompletion,
   getDateStringInTimeZone,
   INDIA_TIME_ZONE,
 } from '../activity/activity.logic';
@@ -137,6 +138,14 @@ export class TasksService {
           error: 'TASK_TEMPLATE_NOT_FOUND',
           message: 'Task template missing',
         });
+      }
+
+      if (task.completion_type === 'hybrid') {
+        await this.assertHybridTaskEligibleForManualConfirmation(
+          userId,
+          task.task_id,
+          session,
+        );
       }
 
       task.status = 'completed';
@@ -401,7 +410,7 @@ export class TasksService {
           .exec(),
         this.carbonRecordModel
           .find({ user_id: userId })
-          .sort({ date: 1 })
+          .sort({ date: -1 })
           .limit(14)
           .lean()
           .exec(),
@@ -417,7 +426,7 @@ export class TasksService {
 
     const behaviorProfile = this.buildBehaviorProfileFromLogs(lastSevenLogs);
     const emissionTrend = computeEmissionTrendFromTotals(
-      carbonRecords.map((r) => r.total_emission),
+      [...carbonRecords].reverse().map((r) => r.total_emission),
     );
 
     const userRegisteredYmd = getDateStringInTimeZone(
@@ -572,6 +581,95 @@ export class TasksService {
     }
 
     return completedTasks / totalTasks;
+  }
+
+  private async assertHybridTaskEligibleForManualConfirmation(
+    userId: Types.ObjectId,
+    taskId: string,
+    session: ClientSession,
+  ): Promise<void> {
+    const todayYmd = getDateStringInTimeZone(new Date(), INDIA_TIME_ZONE);
+
+    const [dailyLog, userProfile] = await Promise.all([
+      this.dailyActivityLogModel
+        .findOne({ date: todayYmd, type: 'daily', user_id: userId })
+        .session(session)
+        .lean()
+        .exec(),
+      this.userProfileModel
+        .findOne({ user_id: userId })
+        .session(session)
+        .lean()
+        .exec(),
+    ]);
+
+    if (!dailyLog) {
+      throw new BadRequestException({
+        error: 'HYBRID_CONFIRMATION_REQUIRES_DAILY_SUBMISSION',
+        message: 'Hybrid tasks can be confirmed only after today’s daily activity submission',
+      });
+    }
+
+    if (!userProfile) {
+      throw new InternalServerErrorException({
+        error: 'PROFILE_NOT_FOUND',
+        message: 'User profile not found',
+      });
+    }
+
+    const recentVehicleDistanceAverage =
+      await this.calculateRecentVehicleDistanceAverage(userId, todayYmd, session);
+
+    const isEligible = evaluateTaskCompletion(
+      { completion_type: 'hybrid', task_id: taskId },
+      {
+        submissionType: 'daily',
+        activity: {
+          date: dailyLog.date,
+          eco_actions: dailyLog.eco_actions,
+          electricity: dailyLog.electricity,
+          food: dailyLog.food,
+          transport: dailyLog.transport,
+          waste: dailyLog.waste,
+        },
+        baselineEmission: userProfile.performance_metrics.baseline_emission,
+        currentAverageEmission:
+          userProfile.performance_metrics.current_avg_emission,
+        latestEmission: 0,
+        profileAverageAcHours: userProfile.behavior_profile.avg_ac_hours,
+        profileAverageDistance: userProfile.behavior_profile.avg_distance,
+        recentVehicleDistanceAverage,
+        yesterdayEmission: 0,
+      },
+    );
+
+    if (!isEligible) {
+      throw new BadRequestException({
+        error: 'HYBRID_TASK_NOT_ELIGIBLE',
+        message: 'Hybrid task confirmation requires a matching validated daily submission',
+      });
+    }
+  }
+
+  private async calculateRecentVehicleDistanceAverage(
+    userId: Types.ObjectId,
+    date: string,
+    session: ClientSession,
+  ): Promise<number> {
+    const recentVehicleLogs = await this.dailyActivityLogModel
+      .find({
+        date: { $lt: date },
+        type: 'daily',
+        user_id: userId,
+        'transport.mode': { $in: ['bike', 'bus', 'car', 'metro'] },
+      })
+      .sort({ date: -1 })
+      .limit(7)
+      .session(session)
+      .lean()
+      .exec();
+
+    return average(recentVehicleLogs.map((log) => log.transport.distance));
   }
 
   private async buildTodayResponse(

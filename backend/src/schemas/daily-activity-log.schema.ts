@@ -10,11 +10,6 @@ const TransportSchema = new Schema(
       enum: ['bike', 'car', 'bus', 'metro', 'walk'],
     },
     distance: { type: Number, required: true },
-    fuel_type: {
-      type: String,
-      required: true,
-      enum: ['petrol', 'diesel', 'none'],
-    },
   },
   { _id: false },
 );
@@ -54,7 +49,6 @@ export interface DailyActivityLog {
   transport: {
     mode: 'bike' | 'car' | 'bus' | 'metro' | 'walk';
     distance: number;
-    fuel_type: 'petrol' | 'diesel' | 'none';
   };
   electricity: {
     units_consumed: number;

@@ -1,10 +1,10 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { randomUUID } from 'node:crypto';
+import { Job } from 'bullmq';
 import { Model, Types } from 'mongoose';
+import { ErrorLogService } from '../resilience/error-log.service';
 import { ErrorLog } from '../schemas/error-log.schema';
 import { JobLog } from '../schemas/job-log.schema';
-import type { BadgeRetryJobData } from './badge-retry-job.types';
 import {
   BADGE_QUEUE_NAME,
   LEADERBOARD_QUEUE_NAME,
@@ -32,8 +32,38 @@ export class JobAuditService {
 
   constructor(
     @InjectModel('JobLog') private readonly jobLogModel: Model<JobLog>,
-    @InjectModel('ErrorLog') private readonly errorLogModel: Model<ErrorLog>,
+    private readonly errorLogService: ErrorLogService,
   ) {}
+
+  logJobExecution(job: Job, queueName: string): void {
+    this.errorLogService.logJobExecution({
+      queueName,
+      jobId: String(job.id),
+      jobName: job.name,
+    });
+  }
+
+  shouldPersistFailure(job: Job): boolean {
+    const maxAttempts =
+      typeof job.opts.attempts === 'number' && job.opts.attempts > 0
+        ? job.opts.attempts
+        : 1;
+    return job.attemptsMade >= maxAttempts;
+  }
+
+  logRetryAttempt(job: Job, queueName: string, error: Error): void {
+    const maxAttempts =
+      typeof job.opts.attempts === 'number' && job.opts.attempts > 0
+        ? job.opts.attempts
+        : 1;
+    this.errorLogService.logRetryAttempt({
+      queueName,
+      jobId: String(job.id),
+      attempt: job.attemptsMade,
+      maxAttempts,
+      message: error.message,
+    });
+  }
 
   async logPermanentJobFailure(params: {
     queueName: string;
@@ -59,36 +89,68 @@ export class JobAuditService {
       this.logger.error(`Failed to write job_logs for job ${params.jobId}`, e);
     }
 
-    if (params.queueName === BADGE_QUEUE_NAME && this.isBadgeRetryPayload(params.payload)) {
-      try {
-        await this.errorLogModel.create({
-          error_id: randomUUID(),
-          type: 'NON_CRITICAL',
-          module: 'badge',
-          user_id: new Types.ObjectId(params.payload.payload.userId),
-          message: params.error.message,
-          payload: params.payload as unknown as Record<string, unknown>,
-          retry_count: params.attemptsMade,
-          timestamp: now,
-        });
-      } catch (e) {
-        this.logger.error('Failed to write error_logs for badge retry', e);
-      }
+    try {
+      await this.errorLogService.logFailure({
+        type: 'NON_CRITICAL',
+        module: mapQueueToErrorModule(params.queueName),
+        userId: extractUserIdFromPayload(params.queueName, params.payload),
+        message: params.error.message,
+        payload: params.payload,
+        retryCount: params.attemptsMade,
+        error: params.error,
+      });
+    } catch (e) {
+      this.logger.error('Failed to write error_logs for permanent job failure', e);
     }
   }
 
-  private isBadgeRetryPayload(payload: unknown): payload is BadgeRetryJobData {
-    if (!payload || typeof payload !== 'object') {
-      return false;
-    }
-    const p = payload as Record<string, unknown>;
-    if (p.type !== 'BADGE_RETRY' || p.trigger_event == null || p.payload == null) {
-      return false;
-    }
-    const inner = p.payload as Record<string, unknown>;
-    return (
-      typeof inner.userId === 'string' &&
-      Types.ObjectId.isValid(inner.userId)
-    );
+}
+
+function mapQueueToErrorModule(queueName: string): ErrorLog['module'] {
+  switch (queueName) {
+    case TASK_QUEUE_NAME:
+      return 'task';
+    case LEADERBOARD_QUEUE_NAME:
+      return 'leaderboard';
+    case BADGE_QUEUE_NAME:
+      return 'badge';
+    default:
+      return 'task';
   }
+}
+
+function extractUserIdFromPayload(
+  queueName: string,
+  payload: unknown,
+): string | undefined {
+  if (!payload || typeof payload !== 'object') {
+    return undefined;
+  }
+
+  const record = payload as Record<string, unknown>;
+
+  if (
+    queueName === TASK_QUEUE_NAME &&
+    typeof record.user_id === 'string' &&
+    Types.ObjectId.isValid(record.user_id)
+  ) {
+    return record.user_id;
+  }
+
+  if (
+    queueName === BADGE_QUEUE_NAME &&
+    'payload' in record &&
+    record.payload &&
+    typeof record.payload === 'object'
+  ) {
+    const nested = record.payload as Record<string, unknown>;
+    if (
+      typeof nested.userId === 'string' &&
+      Types.ObjectId.isValid(nested.userId)
+    ) {
+      return nested.userId;
+    }
+  }
+
+  return undefined;
 }

@@ -36,6 +36,7 @@ export class TaskQueueProcessor extends WorkerHost {
 
   async process(job: Job): Promise<void> {
     const name = job.name ?? JOB_NAME_TASK_RESET;
+    this.jobAuditService.logJobExecution(job, TASK_QUEUE_NAME);
 
     if (name === JOB_NAME_TASK_GENERATE_SINGLE) {
       await this.processTaskGenerateSingle(job);
@@ -69,6 +70,7 @@ export class TaskQueueProcessor extends WorkerHost {
   private async processTaskReset(): Promise<void> {
     const batchSize = 200;
     let lastId: Types.ObjectId | undefined;
+    const failures: string[] = [];
 
     for (;;) {
       const filter =
@@ -93,6 +95,7 @@ export class TaskQueueProcessor extends WorkerHost {
         } catch (error) {
           const message = error instanceof Error ? error.message : String(error);
           this.logger.error(`Task reset failed for user ${String(id)}: ${message}`);
+          failures.push(`user ${String(id)}: ${message}`);
         }
       }
 
@@ -101,11 +104,21 @@ export class TaskQueueProcessor extends WorkerHost {
         break;
       }
     }
+
+    if (failures.length > 0) {
+      throw new Error(
+        `TASK_RESET failed for ${failures.length} user(s). First failure: ${failures[0]}`,
+      );
+    }
   }
 
   @OnWorkerEvent('failed')
   async onFailed(job: Job, error: Error): Promise<void> {
     try {
+      if (!this.jobAuditService.shouldPersistFailure(job)) {
+        this.jobAuditService.logRetryAttempt(job, TASK_QUEUE_NAME, error);
+        return;
+      }
       await this.jobAuditService.logPermanentJobFailure({
         queueName: TASK_QUEUE_NAME,
         jobId: String(job.id),

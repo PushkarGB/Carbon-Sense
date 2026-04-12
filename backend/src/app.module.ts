@@ -10,6 +10,7 @@ import { BadgeEngineModule } from './badge-engine/badge-engine.module';
 import { LeaderboardModule } from './leaderboard/leaderboard.module';
 import { BullJobsQueuesModule } from './jobs/bull-jobs-queues.module';
 import { JobsModule } from './jobs/jobs.module';
+import { ResilienceModule } from './resilience/resilience.module';
 import { DailyActivityLogSchema } from './schemas/daily-activity-log.schema';
 import { UserProfileSchema } from './schemas/user-profile.schema';
 import { TasksModule } from './tasks/tasks.module';
@@ -39,6 +40,7 @@ const bullMqImports = enableBullMq
     MongooseModule.forRoot(
       process.env.MONGODB_URI ?? 'mongodb://127.0.0.1:27017/carbonsense',
     ),
+    ResilienceModule,
     MongooseModule.forFeature([
       { name: 'UserProfile', schema: UserProfileSchema },
       { name: 'DailyActivityLog', schema: DailyActivityLogSchema },

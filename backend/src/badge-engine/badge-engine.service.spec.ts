@@ -8,6 +8,7 @@ import {
   STREAK_UPDATED_EVENT,
   EMISSION_UPDATED_EVENT,
 } from '../activity/activity-events.service';
+import { ErrorLogService } from '../resilience/error-log.service';
 
 describe('BadgeEngineService', () => {
   let service: BadgeEngineService;
@@ -34,6 +35,10 @@ describe('BadgeEngineService', () => {
     on: jest.fn(),
   };
 
+  const mockErrorLogService = {
+    logFailure: jest.fn(),
+  };
+
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -53,6 +58,10 @@ describe('BadgeEngineService', () => {
         {
           provide: ActivityEventsService,
           useValue: mockActivityEventsService,
+        },
+        {
+          provide: ErrorLogService,
+          useValue: mockErrorLogService,
         },
       ],
     }).compile();

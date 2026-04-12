@@ -18,6 +18,7 @@ import {
   JOB_NAME_BADGE_RETRY,
   JOB_PRIORITY_LOW,
 } from '../jobs/queue.constants';
+import { ErrorLogService } from '../resilience/error-log.service';
 import { Badge } from '../schemas/badge.schema';
 import { UserBadge } from '../schemas/user-badge.schema';
 import { UserProfile } from '../schemas/user-profile.schema';
@@ -31,6 +32,7 @@ export class BadgeEngineService implements OnApplicationBootstrap {
     @InjectModel('UserBadge') private readonly userBadgeModel: Model<UserBadge>,
     @InjectModel('UserProfile') private readonly userProfileModel: Model<UserProfile>,
     private readonly activityEventsService: ActivityEventsService,
+    private readonly errorLogService: ErrorLogService,
     @Optional()
     @InjectQueue(BADGE_QUEUE_NAME)
     private readonly badgeRetryQueue?: Queue<BadgeRetryJobData>,
@@ -44,6 +46,17 @@ export class BadgeEngineService implements OnApplicationBootstrap {
     this.activityEventsService.on(TASK_EVALUATED_EVENT, (payload: TaskEvaluatedEventPayload) => {
       this.evaluateTaskBadges(payload).catch((err) => {
         this.logger.error(`Failed to evaluate task badges for user ${payload.userId}`, err);
+        void this.errorLogService.logFailure({
+          type: 'NON_CRITICAL',
+          module: 'badge',
+          userId: payload.userId,
+          message: 'Badge evaluation failed for TASK_EVALUATED',
+          payload: {
+            payload,
+            trigger_event: 'TASK_EVALUATED',
+          },
+          error: err,
+        });
         this.enqueueBadgeRetry('TASK_EVALUATED', payload);
       });
     });
@@ -51,6 +64,17 @@ export class BadgeEngineService implements OnApplicationBootstrap {
     this.activityEventsService.on(STREAK_UPDATED_EVENT, (payload: StreakUpdatedEventPayload) => {
       this.evaluateStreakBadges(payload).catch((err) => {
         this.logger.error(`Failed to evaluate streak badges for user ${payload.userId}`, err);
+        void this.errorLogService.logFailure({
+          type: 'NON_CRITICAL',
+          module: 'badge',
+          userId: payload.userId,
+          message: 'Badge evaluation failed for STREAK_UPDATED',
+          payload: {
+            payload,
+            trigger_event: 'STREAK_UPDATED',
+          },
+          error: err,
+        });
         this.enqueueBadgeRetry('STREAK_UPDATED', payload);
       });
     });
@@ -58,6 +82,17 @@ export class BadgeEngineService implements OnApplicationBootstrap {
     this.activityEventsService.on(EMISSION_UPDATED_EVENT, (payload: EmissionUpdatedEventPayload) => {
       this.evaluatePerformanceBadges(payload).catch((err) => {
         this.logger.error(`Failed to evaluate performance badges for user ${payload.userId}`, err);
+        void this.errorLogService.logFailure({
+          type: 'NON_CRITICAL',
+          module: 'badge',
+          userId: payload.userId,
+          message: 'Badge evaluation failed for EMISSION_UPDATED',
+          payload: {
+            payload,
+            trigger_event: 'EMISSION_UPDATED',
+          },
+          error: err,
+        });
         this.enqueueBadgeRetry('EMISSION_UPDATED', payload);
       });
     });
@@ -101,7 +136,23 @@ export class BadgeEngineService implements OnApplicationBootstrap {
         removeOnComplete: true,
         priority: JOB_PRIORITY_LOW,
       })
-      .catch((err) => this.logger.error('Failed to enqueue BADGE_RETRY job', err));
+      .catch((err) => {
+        this.logger.error('Failed to enqueue BADGE_RETRY job', err);
+        void this.errorLogService.logFailure({
+          type: 'NON_CRITICAL',
+          module: 'badge',
+          userId:
+            typeof payload === 'object' &&
+            payload !== null &&
+            'userId' in payload &&
+            typeof payload.userId === 'string'
+              ? payload.userId
+              : undefined,
+          message: 'Failed to enqueue BADGE_RETRY job',
+          payload: data,
+          error: err,
+        });
+      });
   }
 
   private async evaluateTaskBadges(payload: TaskEvaluatedEventPayload) {

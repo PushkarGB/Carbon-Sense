@@ -1,4 +1,5 @@
 import { Types } from 'mongoose';
+import { ErrorLogService } from '../resilience/error-log.service';
 import { TasksService } from './tasks.service';
 
 describe('TasksService', () => {
@@ -127,6 +128,9 @@ function createTasksService(overrides: Partial<Record<string, unknown>>) {
     ((overrides.activityEventsService ?? {
       emitTaskEvaluated: jest.fn(),
     }) as never),
+    ((overrides.errorLogService ?? {
+      logFailure: jest.fn(),
+    }) as unknown as ErrorLogService),
     (overrides.taskQueue as never) ?? undefined,
   );
 }

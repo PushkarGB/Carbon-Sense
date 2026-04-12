@@ -18,12 +18,17 @@ export class BadgeRetryProcessor extends WorkerHost {
   }
 
   async process(job: Job<BadgeRetryJobData>): Promise<void> {
+    this.jobAuditService.logJobExecution(job, BADGE_QUEUE_NAME);
     await this.badgeEngineService.processBadgeRetryJob(job.data);
   }
 
   @OnWorkerEvent('failed')
   async onFailed(job: Job, error: Error): Promise<void> {
     try {
+      if (!this.jobAuditService.shouldPersistFailure(job)) {
+        this.jobAuditService.logRetryAttempt(job, BADGE_QUEUE_NAME, error);
+        return;
+      }
       await this.jobAuditService.logPermanentJobFailure({
         queueName: BADGE_QUEUE_NAME,
         jobId: String(job.id),

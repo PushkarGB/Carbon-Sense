@@ -1,6 +1,7 @@
 import { InternalServerErrorException } from '@nestjs/common';
 import { Types } from 'mongoose';
 import { CarbonRecord } from '../schemas/carbon-record.schema';
+import { ErrorLogService } from '../resilience/error-log.service';
 import { UserProfile } from '../schemas/user-profile.schema';
 import { ActivityEventsService } from './activity-events.service';
 import { ActivityService } from './activity.service';
@@ -141,6 +142,9 @@ describe('ActivityService', () => {
         transport_walk: 0,
       }),
     };
+    const errorLogService = {
+      logFailure: jest.fn(),
+    };
 
     const service = new ActivityService(
       connection as never,
@@ -152,6 +156,7 @@ describe('ActivityService', () => {
       userProfileModel as never,
       activityEventsService as unknown as ActivityEventsService,
       emissionFactorService as unknown as EmissionFactorService,
+      errorLogService as unknown as ErrorLogService,
     );
 
     const response = await service.submitDailyActivity(
@@ -203,6 +208,9 @@ describe('ActivityService', () => {
         }),
       ),
     };
+    const errorLogService = {
+      logFailure: jest.fn(),
+    };
 
     const service = new ActivityService(
       connection as never,
@@ -214,6 +222,7 @@ describe('ActivityService', () => {
       userProfileModel as never,
       activityEventsService as unknown as ActivityEventsService,
       emissionFactorService as unknown as EmissionFactorService,
+      errorLogService as unknown as ErrorLogService,
     );
 
     await expect(
@@ -323,6 +332,9 @@ describe('ActivityService', () => {
         transport_walk: 0,
       }),
     };
+    const errorLogService = {
+      logFailure: jest.fn(),
+    };
 
     const service = new ActivityService(
       connection as never,
@@ -334,6 +346,7 @@ describe('ActivityService', () => {
       userProfileModel as never,
       activityEventsService as unknown as ActivityEventsService,
       emissionFactorService as unknown as EmissionFactorService,
+      errorLogService as unknown as ErrorLogService,
     );
 
     const response = await service.submitDailyActivity(
@@ -426,6 +439,9 @@ describe('ActivityService', () => {
         transport_walk: 0,
       }),
     };
+    const errorLogService = {
+      logFailure: jest.fn(),
+    };
 
     const service = new ActivityService(
       connection as never,
@@ -437,6 +453,7 @@ describe('ActivityService', () => {
       userProfileModel as never,
       activityEventsService as unknown as ActivityEventsService,
       emissionFactorService as unknown as EmissionFactorService,
+      errorLogService as unknown as ErrorLogService,
     );
 
     const response = await service.submitWeeklyActivity(

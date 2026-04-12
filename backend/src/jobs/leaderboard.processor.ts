@@ -17,6 +17,7 @@ export class LeaderboardProcessor extends WorkerHost {
   }
 
   async process(_job: Job): Promise<void> {
+    this.jobAuditService.logJobExecution(_job, LEADERBOARD_QUEUE_NAME);
     const updated = await this.leaderboardComputation.recomputeAllFromCarbonRecords();
     if (updated === 0) {
       this.logger.log('Leaderboard job: no carbon_records to aggregate');
@@ -26,6 +27,10 @@ export class LeaderboardProcessor extends WorkerHost {
   @OnWorkerEvent('failed')
   async onFailed(job: Job, error: Error): Promise<void> {
     try {
+      if (!this.jobAuditService.shouldPersistFailure(job)) {
+        this.jobAuditService.logRetryAttempt(job, LEADERBOARD_QUEUE_NAME, error);
+        return;
+      }
       await this.jobAuditService.logPermanentJobFailure({
         queueName: LEADERBOARD_QUEUE_NAME,
         jobId: String(job.id),

@@ -1,11 +1,13 @@
 import {
   BadRequestException,
   ConflictException,
+  HttpException,
   Injectable,
   InternalServerErrorException,
 } from '@nestjs/common';
 import { InjectConnection, InjectModel } from '@nestjs/mongoose';
 import { ClientSession, Connection, Model, Types } from 'mongoose';
+import { ErrorLogService } from '../resilience/error-log.service';
 import { CarbonRecord } from '../schemas/carbon-record.schema';
 import { DailyActivityLog } from '../schemas/daily-activity-log.schema';
 import { TaskTemplate } from '../schemas/task-template.schema';
@@ -53,6 +55,7 @@ export class ActivityService {
     private readonly userProfileModel: Model<UserProfile>,
     private readonly activityEventsService: ActivityEventsService,
     private readonly emissionFactorService: EmissionFactorService,
+    private readonly errorLogService: ErrorLogService,
   ) {}
 
   async submitDailyActivity(
@@ -175,10 +178,18 @@ export class ActivityService {
 
       const emissionFactors =
         await this.emissionFactorService.getEmissionFactors();
-      const emissionResult = calculateDailyEmission(
-        activityInput,
-        emissionFactors,
-      );
+      let emissionResult: ReturnType<typeof calculateDailyEmission>;
+      try {
+        emissionResult = calculateDailyEmission(activityInput, emissionFactors);
+      } catch (error) {
+        if (error instanceof HttpException) {
+          throw error;
+        }
+        throw new InternalServerErrorException({
+          error: 'EMISSION_CALC_FAILED',
+          message: 'Unable to calculate emission',
+        });
+      }
 
       const carbonRecord = new this.carbonRecordModel({
         breakdown: emissionResult.breakdown,
@@ -230,18 +241,29 @@ export class ActivityService {
         { session },
       );
 
-      const completedTaskIds = await this.evaluateTasks(
-        userId,
-        activityInput,
-        submissionType,
-        emissionResult.totalEmission,
-        nextPerformanceMetrics.baseline_emission,
-        nextPerformanceMetrics.current_avg_emission,
-        getYesterdayEmission(carbonRecords),
-        nextBehaviorProfile,
-        userProfile.task_stats,
-        session,
-      );
+      let completedTaskIds: string[];
+      try {
+        completedTaskIds = await this.evaluateTasks(
+          userId,
+          activityInput,
+          submissionType,
+          emissionResult.totalEmission,
+          nextPerformanceMetrics.baseline_emission,
+          nextPerformanceMetrics.current_avg_emission,
+          getYesterdayEmission(carbonRecords),
+          nextBehaviorProfile,
+          userProfile.task_stats,
+          session,
+        );
+      } catch (error) {
+        if (error instanceof HttpException) {
+          throw error;
+        }
+        throw new InternalServerErrorException({
+          error: 'TASK_EVALUATION_FAILED',
+          message: 'Unable to evaluate tasks',
+        });
+      }
 
       await session.commitTransaction();
       this.emitPostCommitEvents(
@@ -742,8 +764,19 @@ export class ActivityService {
           totalEmission: emissionResult.totalEmission,
           userId: userId.toString(),
         });
-      } catch {
-        // Async/event failures must not affect the committed submission.
+      } catch (error) {
+        void this.errorLogService.logFailure({
+          type: 'NON_CRITICAL',
+          module: 'badge',
+          userId,
+          message: 'Failed to emit post-commit badge evaluation events',
+          payload: {
+            completedTaskIds,
+            date,
+            totalEmission: emissionResult.totalEmission,
+          },
+          error,
+        });
       }
     });
   }

@@ -5,6 +5,7 @@ import { UserProfile } from './schemas/user-profile.schema';
 import { DailyActivityLog } from './schemas/daily-activity-log.schema';
 import { ActivityEventsService } from './activity/activity-events.service';
 import { getDateStringInTimeZone, INDIA_TIME_ZONE } from './activity/activity.logic';
+import { ErrorLogService } from './resilience/error-log.service';
 
 @Injectable()
 export class AppService {
@@ -12,6 +13,7 @@ export class AppService {
     @InjectModel('UserProfile') private readonly userProfileModel: Model<UserProfile>,
     @InjectModel('DailyActivityLog') private readonly dailyActivityLogModel: Model<DailyActivityLog>,
     private readonly activityEventsService: ActivityEventsService,
+    private readonly errorLogService: ErrorLogService,
   ) {}
 
   getHello(): string {
@@ -67,7 +69,19 @@ export class AppService {
                 date: todayYmd,
                 streakDays: newStreak,
             });
-        } catch {}
+        } catch (error) {
+            void this.errorLogService.logFailure({
+              type: 'NON_CRITICAL',
+              module: 'badge',
+              userId,
+              message: 'Failed to emit STREAK_UPDATED badge event',
+              payload: {
+                date: todayYmd,
+                streakDays: newStreak,
+              },
+              error,
+            });
+        }
     });
 
     return { 

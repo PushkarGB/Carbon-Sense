@@ -42,6 +42,7 @@ import {
   generateDailyTaskSelection,
   type TaskGenerationSignals,
 } from './task-generation.engine';
+import { ErrorLogService } from '../resilience/error-log.service';
 
 type TaskStats = UserProfile['task_stats'];
 
@@ -60,6 +61,7 @@ export class TasksService {
     @InjectModel('CarbonRecord')
     private readonly carbonRecordModel: Model<CarbonRecord>,
     private readonly activityEventsService: ActivityEventsService,
+    private readonly errorLogService: ErrorLogService,
     @Optional()
     @InjectQueue(TASK_QUEUE_NAME)
     private readonly taskQueue?: Queue,
@@ -422,8 +424,18 @@ export class TasksService {
           date,
           userId: userId.toString(),
         });
-      } catch {
-        // Non-blocking per execution-flow async rules
+      } catch (error) {
+        void this.errorLogService.logFailure({
+          type: 'NON_CRITICAL',
+          module: 'badge',
+          userId,
+          message: 'Failed to emit TASK_EVALUATED badge event',
+          payload: {
+            completedTaskIds,
+            date,
+          },
+          error,
+        });
       }
     });
   }

@@ -5,6 +5,7 @@ import { AppService } from './app.service';
 import { ActivityEventsService } from './activity/activity-events.service';
 import { InternalServerErrorException } from '@nestjs/common';
 import * as logic from './activity/activity.logic';
+import { ErrorLogService } from './resilience/error-log.service';
 
 describe('AppService', () => {
   let service: AppService;
@@ -24,6 +25,10 @@ describe('AppService', () => {
     emitStreakUpdated: jest.fn(),
   };
 
+  const mockErrorLogService = {
+    logFailure: jest.fn(),
+  };
+
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -39,6 +44,10 @@ describe('AppService', () => {
         {
           provide: ActivityEventsService,
           useValue: mockActivityEventsService,
+        },
+        {
+          provide: ErrorLogService,
+          useValue: mockErrorLogService,
         },
       ],
     }).compile();

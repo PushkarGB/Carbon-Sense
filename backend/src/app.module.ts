@@ -1,14 +1,37 @@
+import { BullModule } from '@nestjs/bullmq';
 import { Module } from '@nestjs/common';
-import { ConfigModule } from '@nestjs/config';
+import { ConfigModule, ConfigService } from '@nestjs/config';
 import { MongooseModule } from '@nestjs/mongoose';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { ActivityModule } from './activity/activity.module';
 import { AuthModule } from './auth/auth.module';
-import { TasksModule } from './tasks/tasks.module';
 import { BadgeEngineModule } from './badge-engine/badge-engine.module';
-import { UserProfileSchema } from './schemas/user-profile.schema';
+import { LeaderboardModule } from './leaderboard/leaderboard.module';
+import { BullJobsQueuesModule } from './jobs/bull-jobs-queues.module';
+import { JobsModule } from './jobs/jobs.module';
 import { DailyActivityLogSchema } from './schemas/daily-activity-log.schema';
+import { UserProfileSchema } from './schemas/user-profile.schema';
+import { TasksModule } from './tasks/tasks.module';
+
+const enableBullMq = process.env.DISABLE_BULLMQ !== 'true';
+
+const bullMqImports = enableBullMq
+  ? [
+      BullModule.forRootAsync({
+        imports: [ConfigModule],
+        useFactory: (config: ConfigService) => ({
+          connection: {
+            url: config.get<string>('REDIS_URL', 'redis://127.0.0.1:6379'),
+            maxRetriesPerRequest: null,
+          },
+        }),
+        inject: [ConfigService],
+      }),
+      BullJobsQueuesModule,
+      JobsModule,
+    ]
+  : [];
 
 @Module({
   imports: [
@@ -20,10 +43,12 @@ import { DailyActivityLogSchema } from './schemas/daily-activity-log.schema';
       { name: 'UserProfile', schema: UserProfileSchema },
       { name: 'DailyActivityLog', schema: DailyActivityLogSchema },
     ]),
+    ...bullMqImports,
     ActivityModule,
     AuthModule,
     TasksModule,
-    BadgeEngineModule,
+    LeaderboardModule,
+    ...(enableBullMq ? [] : [BadgeEngineModule]),
   ],
   controllers: [AppController],
   providers: [AppService],

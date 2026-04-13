@@ -83,7 +83,7 @@ export class AuthService {
         },
         last_streak_update: UNSET_PROFILE_DATE,
         last_submission_date: UNSET_PROFILE_DATE,
-        onboarding_completed: true,
+        onboarding_completed: false,
         performance_metrics: {
           baseline_emission: 0,
           baseline_status: 'pending',
@@ -91,6 +91,7 @@ export class AuthService {
           reduction_percent: 0,
         },
         streak_days: 0,
+        consecutive_submission_days: 0,
         task_stats: {
           awareness: 0,
           eco_action: 0,
@@ -98,6 +99,7 @@ export class AuthService {
         },
         updated_at: now,
         user_id: user._id,
+        onboarding_defaults: null,
       });
       await userProfile.save({ session });
 

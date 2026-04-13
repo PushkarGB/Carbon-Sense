@@ -1,9 +1,10 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model, Types } from 'mongoose';
+import { Model, PipelineStage, Types } from 'mongoose';
 import { CarbonRecord } from '../schemas/carbon-record.schema';
 import { Leaderboard } from '../schemas/leaderboard.schema';
 import { User } from '../schemas/user.schema';
+import { ListLeaderboardDto } from './dto/list-leaderboard.dto';
 
 const BULK_CHUNK = 500;
 
@@ -14,6 +15,18 @@ type LeaderboardAggRow = {
   city: string;
   role: string;
   avg_emission: number;
+};
+
+type LeaderboardListRow = {
+  user_id: Types.ObjectId;
+  name: string;
+  city: string;
+  role: string;
+  profile_picture_url: string;
+  avg_emission: number;
+  total_emission: number;
+  total_days_logged: number;
+  updated_at: Date;
 };
 
 @Injectable()
@@ -73,6 +86,58 @@ export class LeaderboardComputationService {
     return { updated_at: now.toISOString() };
   }
 
+  async listForUserContext(
+    userId: Types.ObjectId,
+    query: ListLeaderboardDto,
+  ) {
+    const user = await this.userModel.findById(userId).lean().exec();
+    if (!user) {
+      throw new NotFoundException({
+        error: 'USER_NOT_FOUND',
+        message: 'User not found',
+      });
+    }
+
+    const selfRowExists = await this.leaderboardModel.exists({ user_id: userId });
+    if (!selfRowExists) {
+      await this.recomputeForUser(userId);
+    }
+
+    const scope = query.scope ?? 'global';
+    const limit = query.limit ?? 20;
+    const rows = await this.leaderboardModel
+      .aggregate<LeaderboardListRow>(
+        this.buildListPipeline({
+          city: scope === 'city' ? user.city : undefined,
+          role: scope === 'role' ? user.role : undefined,
+        }),
+      )
+      .exec();
+
+    const rankedRows = rows.map((row, index) => ({
+      rank: index + 1,
+      user_id: row.user_id.toString(),
+      name: row.name,
+      city: row.city,
+      role: row.role,
+      profile_picture_url: row.profile_picture_url,
+      avg_emission: row.avg_emission,
+      total_days_logged: row.total_days_logged,
+      total_emission: row.total_emission,
+      updated_at: row.updated_at,
+      is_current_user: row.user_id.toString() === userId.toString(),
+    }));
+
+    return {
+      scope,
+      scope_value:
+        scope === 'city' ? user.city : scope === 'role' ? user.role : null,
+      current_user_rank:
+        rankedRows.find((row) => row.is_current_user)?.rank ?? null,
+      rows: rankedRows.slice(0, limit),
+    };
+  }
+
   private buildPipeline(userId?: Types.ObjectId) {
     const match = userId ? [{ $match: { user_id: userId } }] : [];
     return [
@@ -119,6 +184,53 @@ export class LeaderboardComputationService {
     return this.carbonRecordModel
       .aggregate<LeaderboardAggRow>(this.buildPipeline(userId))
       .exec();
+  }
+
+  private buildListPipeline(filters: {
+    city?: string;
+    role?: string;
+  }): PipelineStage[] {
+    const match: Record<string, unknown> = {};
+    if (filters.city) {
+      match.city = filters.city;
+    }
+    if (filters.role) {
+      match.role = filters.role;
+    }
+
+    const stages: PipelineStage[] = [];
+    if (Object.keys(match).length > 0) {
+      stages.push({ $match: match });
+    }
+
+    stages.push(
+      { $sort: { avg_emission: 1, total_days_logged: -1, user_id: 1 } },
+      {
+        $lookup: {
+          from: 'users',
+          localField: 'user_id',
+          foreignField: '_id',
+          as: 'user',
+        },
+      },
+      { $unwind: '$user' },
+      {
+        $project: {
+          _id: 0,
+          avg_emission: 1,
+          city: 1,
+          name: '$user.name',
+          profile_picture_url: '$user.profile_picture_url',
+          role: 1,
+          total_days_logged: 1,
+          total_emission: 1,
+          updated_at: 1,
+          user_id: 1,
+        },
+      },
+    );
+
+    return stages;
   }
 
   private async bulkUpsert(rows: LeaderboardAggRow[], now: Date): Promise<void> {

@@ -1,0 +1,52 @@
+/**
+ * Maharashtra (India) city list for registration city selection.
+ * Used by the UI as a searchable dropdown. The backend uses these
+ * slugs (lowercase, trimmed) for AQICN API city matching.
+ */
+export const MAHARASHTRA_CITIES = [
+  'Ahmednagar',
+  'Akola',
+  'Amravati',
+  'Aurangabad',
+  'Baramati',
+  'Beed',
+  'Bhandara',
+  'Bhiwandi',
+  'Buldhana',
+  'Chandrapur',
+  'Dhule',
+  'Gadchiroli',
+  'Gondia',
+  'Hingoli',
+  'Ichalkaranji',
+  'Jalgaon',
+  'Jalna',
+  'Kalyan',
+  'Kolhapur',
+  'Latur',
+  'Malegaon',
+  'Mumbai',
+  'Nagpur',
+  'Nanded',
+  'Nandurbar',
+  'Nashik',
+  'Navi Mumbai',
+  'Osmanabad',
+  'Palghar',
+  'Panvel',
+  'Parbhani',
+  'Pune',
+  'Raigad',
+  'Ratnagiri',
+  'Sangli',
+  'Satara',
+  'Sindhudurg',
+  'Solapur',
+  'Thane',
+  'Vasai-Virar',
+  'Wardha',
+  'Washim',
+  'Yavatmal',
+] as const;
+
+export type MaharashtraCity = (typeof MAHARASHTRA_CITIES)[number];

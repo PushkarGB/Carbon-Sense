@@ -258,6 +258,15 @@ export class ActivityService {
       };
       if (submissionType === 'daily') {
         profileUpdate.last_submission_date = dto.date;
+
+        // Track consecutive daily submissions (decoupled from app-open streak).
+        const yesterdayYmd = addDaysToYmd(dto.date, -1);
+        if (userProfile.last_submission_date === yesterdayYmd) {
+          profileUpdate.consecutive_submission_days =
+            (userProfile.consecutive_submission_days ?? 0) + 1;
+        } else {
+          profileUpdate.consecutive_submission_days = 1;
+        }
       }
 
       await this.userProfileModel.updateOne(

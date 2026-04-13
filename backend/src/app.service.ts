@@ -7,6 +7,8 @@ import { ActivityEventsService } from './activity/activity-events.service';
 import { getDateStringInTimeZone, INDIA_TIME_ZONE } from './activity/activity.logic';
 import { ErrorLogService } from './resilience/error-log.service';
 
+const UNSET_PROFILE_DATE = '1970-01-01';
+
 @Injectable()
 export class AppService {
   constructor(
@@ -38,17 +40,13 @@ export class AppService {
       return { message: 'App open recorded', streak_updated: false };
     }
 
+    // Streak is purely based on consecutive app opens (decoupled from submissions).
+    // If the user opened the app yesterday, increment streak; otherwise reset to 1.
     const yesterdayTemp = new Date(now.getTime() - 24 * 60 * 60 * 1000);
     const yesterdayYmd = getDateStringInTimeZone(yesterdayTemp, INDIA_TIME_ZONE);
-    
-    const submittedYesterday = await this.dailyActivityLogModel.exists({
-      user_id: userId,
-      type: 'daily',
-      date: yesterdayYmd
-    });
 
     let newStreak = 1;
-    if (submittedYesterday) {
+    if (userProfile.last_streak_update === yesterdayYmd) {
       newStreak = userProfile.streak_days + 1;
     }
 

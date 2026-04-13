@@ -13,6 +13,10 @@ type PersistedModelMock = jest.Mock & {
 };
 
 describe('ActivityService', () => {
+  beforeEach(() => {
+    jest.useFakeTimers().setSystemTime(new Date('2026-04-12T06:00:00.000Z'));
+  });
+
   afterEach(() => {
     jest.useRealTimers();
     jest.clearAllMocks();
@@ -242,8 +246,6 @@ describe('ActivityService', () => {
   });
 
   it('emits post-commit events only after the transaction commits', async () => {
-    jest.useFakeTimers();
-
     const session = createSession();
     const connection = {
       startSession: jest.fn().mockResolvedValue(session),
@@ -376,8 +378,6 @@ describe('ActivityService', () => {
   });
 
   it('completes weekly_input on the documented weekly submission day', async () => {
-    jest.useFakeTimers();
-
     const session = createSession();
     const connection = {
       startSession: jest.fn().mockResolvedValue(session),
@@ -603,6 +603,8 @@ function createUserProfile(): UserProfile {
       reduction_percent: 0,
     },
     streak_days: 0,
+    consecutive_submission_days: 0,
+    onboarding_defaults: null,
     task_stats: {
       awareness: 0,
       eco_action: 0,

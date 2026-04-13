@@ -67,9 +67,21 @@ describe('AppService', () => {
   describe('handleAppOpen', () => {
     const userId = new Types.ObjectId();
     const today = '2026-04-12';
+    const yesterday = '2026-04-11';
 
     beforeEach(() => {
-      jest.spyOn(logic, 'getDateStringInTimeZone').mockReturnValue(today);
+      // Mock getDateStringInTimeZone to return today for "now" and yesterday for the yesterday calc
+      jest.spyOn(logic, 'getDateStringInTimeZone').mockImplementation(
+        (date: Date) => {
+          // If the date is roughly yesterday (within a day of today minus ~24h), return yesterday
+          const now = new Date();
+          const diffMs = now.getTime() - date.getTime();
+          if (diffMs > 12 * 60 * 60 * 1000) {
+            return yesterday;
+          }
+          return today;
+        },
+      );
     });
 
     it('should throw if missing profile', async () => {
@@ -85,34 +97,37 @@ describe('AppService', () => {
         { $inc: { 'engagement_metrics.app_open_count': 1 } }
       );
       expect(res.streak_updated).toBe(false);
-      expect(mockDailyActivityLogModel.exists).not.toHaveBeenCalled();
     });
 
-    it('should break streak to 1 if yesterday log is missing', async () => {
+    it('should break streak to 1 if last_streak_update is NOT yesterday (pure app-open streak)', async () => {
+      // last_streak_update is 2 days ago → streak resets to 1
       mockUserProfileModel.exec.mockResolvedValueOnce({ _id: userId, last_streak_update: '2026-04-10', streak_days: 5 });
-      mockDailyActivityLogModel.exists.mockResolvedValueOnce(false);
-      
+
       const res = await service.handleAppOpen(userId);
-      
+
       expect(mockUserProfileModel.updateOne).toHaveBeenCalledWith(
         { _id: userId },
         { $set: { streak_days: 1, last_streak_update: today } }
       );
       expect(res.streak_updated).toBe(true);
       expect(res.streak_days).toBe(1);
+      // DailyActivityLogModel is NOT consulted — streak is decoupled from submissions
+      expect(mockDailyActivityLogModel.exists).not.toHaveBeenCalled();
     });
 
-    it('should increment streak if yesterday log exists', async () => {
-      mockUserProfileModel.exec.mockResolvedValueOnce({ _id: userId, last_streak_update: '2026-04-11', streak_days: 5 });
-      mockDailyActivityLogModel.exists.mockResolvedValueOnce(true);
-      
+    it('should increment streak if last_streak_update is yesterday (consecutive app opens)', async () => {
+      // last_streak_update is yesterday → streak increments (no submission check needed)
+      mockUserProfileModel.exec.mockResolvedValueOnce({ _id: userId, last_streak_update: yesterday, streak_days: 5 });
+
       const res = await service.handleAppOpen(userId);
-      
+
       expect(res.streak_days).toBe(6);
       expect(mockUserProfileModel.updateOne).toHaveBeenCalledWith(
         { _id: userId },
         { $set: { streak_days: 6, last_streak_update: today } }
       );
+      // DailyActivityLogModel is NOT consulted — streak is purely app-open based
+      expect(mockDailyActivityLogModel.exists).not.toHaveBeenCalled();
     });
   });
 });

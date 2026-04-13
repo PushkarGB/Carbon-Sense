@@ -70,10 +70,42 @@ const WeeklyInsightsSchema = new Schema(
   { _id: false },
 );
 
+const OnboardingDefaultsSchema = new Schema(
+  {
+    transport_mode: {
+      type: String,
+      required: true,
+      enum: ['bike', 'car', 'bus', 'metro', 'walk'],
+    },
+    avg_daily_distance_km: { type: Number, required: true },
+    electricity_units_per_day: { type: Number, required: true },
+    ac_hours_per_day: { type: Number, required: true },
+    diet_type: {
+      type: String,
+      required: true,
+      enum: ['veg', 'non_veg', 'mixed'],
+    },
+    meals_per_day: { type: Number, required: true },
+    waste_bags_per_day: { type: Number, required: true },
+  },
+  { _id: false },
+);
+
+export interface OnboardingDefaults {
+  transport_mode: 'bike' | 'car' | 'bus' | 'metro' | 'walk';
+  avg_daily_distance_km: number;
+  electricity_units_per_day: number;
+  ac_hours_per_day: number;
+  diet_type: 'veg' | 'non_veg' | 'mixed';
+  meals_per_day: number;
+  waste_bags_per_day: number;
+}
+
 export interface UserProfile {
   user_id: Types.ObjectId;
   onboarding_completed: boolean;
   streak_days: number;
+  consecutive_submission_days: number;
   last_submission_date: string;
   last_streak_update: string;
   task_stats: {
@@ -112,6 +144,7 @@ export interface UserProfile {
     eco_action_score: number;
     diet_non_veg_day_fraction: number;
   };
+  onboarding_defaults: OnboardingDefaults | null;
   created_at: Date;
   updated_at: Date;
 }
@@ -121,6 +154,7 @@ export const UserProfileSchema = new Schema<UserProfile>(
     user_id: { type: Schema.Types.ObjectId, ref: 'User', required: true },
     onboarding_completed: { type: Boolean, required: true },
     streak_days: { type: Number, required: true },
+    consecutive_submission_days: { type: Number, required: true, default: 0 },
     last_submission_date: {
       type: String,
       required: true,
@@ -139,6 +173,7 @@ export const UserProfileSchema = new Schema<UserProfile>(
     behavior_profile: { type: BehaviorProfileSchema, required: true },
     engagement_metrics: { type: EngagementMetricsSchema, required: true },
     weekly_insights: { type: WeeklyInsightsSchema, required: true },
+    onboarding_defaults: { type: OnboardingDefaultsSchema, default: null },
     created_at: { type: Date, required: true },
     updated_at: { type: Date, required: true },
   },
@@ -149,4 +184,3 @@ export const UserProfileSchema = new Schema<UserProfile>(
 );
 
 UserProfileSchema.index({ user_id: 1 }, { unique: true });
-

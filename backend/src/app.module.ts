@@ -5,11 +5,14 @@ import { MongooseModule } from '@nestjs/mongoose';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { ActivityModule } from './activity/activity.module';
+import { AqiModule } from './aqi/aqi.module';
 import { AuthModule } from './auth/auth.module';
 import { BadgeEngineModule } from './badge-engine/badge-engine.module';
+import { ExperienceModule } from './experience/experience.module';
 import { LeaderboardModule } from './leaderboard/leaderboard.module';
 import { BullJobsQueuesModule } from './jobs/bull-jobs-queues.module';
 import { JobsModule } from './jobs/jobs.module';
+import { OnboardingModule } from './onboarding/onboarding.module';
 import { ResilienceModule } from './resilience/resilience.module';
 import { DailyActivityLogSchema } from './schemas/daily-activity-log.schema';
 import { UserProfileSchema } from './schemas/user-profile.schema';
@@ -47,7 +50,10 @@ const bullMqImports = enableBullMq
     ]),
     ...bullMqImports,
     ActivityModule,
+    AqiModule,
     AuthModule,
+    ExperienceModule,
+    OnboardingModule,
     TasksModule,
     LeaderboardModule,
     ...(enableBullMq ? [] : [BadgeEngineModule]),

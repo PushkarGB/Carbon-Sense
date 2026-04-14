@@ -43,18 +43,23 @@ export class RedisCacheService {
       const socket = new Socket();
       let buffer = '';
       let settled = false;
+      let timeoutId: NodeJS.Timeout;
 
       const settle = (value: RedisValue): void => {
         if (settled) {
           return;
         }
         settled = true;
+        clearTimeout(timeoutId);
         socket.destroy();
         resolve(value);
       };
 
-      socket.setTimeout(1500);
-      socket.once('timeout', () => settle(null));
+      // Strict absolute timeout for the entire Redis command lifecycle
+      timeoutId = setTimeout(() => {
+        settle(null);
+      }, 1500);
+
       socket.once('error', () => settle(null));
       socket.connect(config.port, config.host, async () => {
         try {

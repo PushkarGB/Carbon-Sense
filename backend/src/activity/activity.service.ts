@@ -100,9 +100,7 @@ export class ActivityService {
     const session = await this.connection.startSession();
 
     try {
-      session.startTransaction();
-
-      const user = await this.userModel.findById(userId).session(session).exec();
+      const user = await this.userModel.findById(userId).exec();
       if (!user) {
         throw new InternalServerErrorException({
           error: 'USER_NOT_FOUND',
@@ -110,7 +108,29 @@ export class ActivityService {
         });
       }
 
-      const existingLog = await this.dailyActivityLogModel
+      const userProfile = await this.userProfileModel
+        .findOne({ user_id: userId })
+        .exec();
+
+      if (!userProfile) {
+        throw new InternalServerErrorException({
+          error: 'PROFILE_NOT_FOUND',
+          message: 'User profile not found',
+        });
+      }
+
+      await this.ensureGeneratedDailyTasks(
+        userId,
+        dto.date,
+        user,
+        userProfile,
+      );
+
+      let emissionResultToEmit: any;
+      let completedTaskIdsToEmit: string[] = [];
+
+      const result = await session.withTransaction(async () => {
+        const existingLog = await this.dailyActivityLogModel
         .findOne({
           date: dto.date,
           type: submissionType,
@@ -133,17 +153,11 @@ export class ActivityService {
         });
       }
 
-      const userProfile = await this.userProfileModel
+      // Re-fetch userProfile inside transaction to lock it, though not strictly required if we just update
+      const lockedUserProfile = await this.userProfileModel
         .findOne({ user_id: userId })
         .session(session)
         .exec();
-
-      if (!userProfile) {
-        throw new InternalServerErrorException({
-          error: 'PROFILE_NOT_FOUND',
-          message: 'User profile not found',
-        });
-      }
 
       if (
         submissionType === 'weekly' &&
@@ -157,14 +171,6 @@ export class ActivityService {
           message: 'Weekly activity is available only on the documented weekly unlock day',
         });
       }
-
-      await this.ensureGeneratedDailyTasks(
-        userId,
-        dto.date,
-        user,
-        userProfile,
-        session,
-      );
 
       const now = new Date();
       const activityLog = new this.dailyActivityLogModel({
@@ -233,22 +239,22 @@ export class ActivityService {
       const nextWeeklyInsights =
         submissionType === 'weekly'
           ? this.buildWeeklyInsights(weeklyLogs, emissionFactors)
-          : this.getWeeklyInsightsOrDefault(userProfile.weekly_insights);
+          : this.getWeeklyInsightsOrDefault(lockedUserProfile!.weekly_insights);
       const nextPerformanceMetrics =
         submissionType === 'daily'
           ? this.buildPerformanceMetrics(
-              userProfile.performance_metrics,
+              lockedUserProfile!.performance_metrics,
               carbonRecords,
             )
-          : userProfile.performance_metrics;
+          : lockedUserProfile!.performance_metrics;
 
       const nextEngagementMetrics =
         submissionType === 'daily'
           ? {
-              ...userProfile.engagement_metrics,
+              ...lockedUserProfile!.engagement_metrics,
               total_days_logged: dailyLogs.length,
             }
-          : userProfile.engagement_metrics;
+          : lockedUserProfile!.engagement_metrics;
       const profileUpdate: Record<string, unknown> = {
         behavior_profile: nextBehaviorProfile,
         engagement_metrics: nextEngagementMetrics,
@@ -261,16 +267,16 @@ export class ActivityService {
 
         // Track consecutive daily submissions (decoupled from app-open streak).
         const yesterdayYmd = addDaysToYmd(dto.date, -1);
-        if (userProfile.last_submission_date === yesterdayYmd) {
+        if (lockedUserProfile!.last_submission_date === yesterdayYmd) {
           profileUpdate.consecutive_submission_days =
-            (userProfile.consecutive_submission_days ?? 0) + 1;
+            (lockedUserProfile!.consecutive_submission_days ?? 0) + 1;
         } else {
           profileUpdate.consecutive_submission_days = 1;
         }
       }
 
       await this.userProfileModel.updateOne(
-        { _id: userProfile._id },
+        { _id: lockedUserProfile!._id },
         { $set: profileUpdate },
         { session },
       );
@@ -286,7 +292,7 @@ export class ActivityService {
           nextPerformanceMetrics.current_avg_emission,
           submissionType === 'daily' ? getYesterdayEmission(carbonRecords) : 0,
           nextBehaviorProfile,
-          userProfile.task_stats,
+          lockedUserProfile!.task_stats,
           session,
         );
       } catch (error) {
@@ -299,14 +305,8 @@ export class ActivityService {
         });
       }
 
-      await session.commitTransaction();
-      this.emitPostCommitEvents(
-        userId,
-        dto.date,
-        submissionType,
-        emissionResult,
-        completedTaskIds,
-      );
+      emissionResultToEmit = { breakdown: emissionResult.breakdown, totalEmission: emissionResult.totalEmission };
+      completedTaskIdsToEmit = completedTaskIds;
 
       return {
         carbon_record: {
@@ -320,9 +320,17 @@ export class ActivityService {
             ? 'Daily activity submitted successfully'
             : 'Weekly activity submitted successfully',
       };
-    } catch (error) {
-      await session.abortTransaction();
-      throw error;
+    });
+
+    this.emitPostCommitEvents(
+      userId,
+      dto.date,
+      submissionType,
+      emissionResultToEmit,
+      completedTaskIdsToEmit,
+    );
+
+    return result;
     } finally {
       await session.endSession();
     }
@@ -519,21 +527,22 @@ export class ActivityService {
       UserProfile,
       'engagement_metrics' | 'streak_days' | 'performance_metrics' | 'weekly_insights'
     >,
-    session: ClientSession,
+    session?: ClientSession,
   ): Promise<UserDailyTask> {
-    const existing = await this.userDailyTaskModel
-      .findOne({ date: todayYmd, user_id: userId })
-      .session(session)
-      .exec();
+    const query = this.userDailyTaskModel.findOne({ date: todayYmd, user_id: userId });
+    if (session) {
+      query.session(session);
+    }
+    const existing = await query.exec();
     if (existing) {
       return existing;
     }
 
-    const templates = await this.taskTemplateModel
-      .find({ active: true })
-      .session(session)
-      .lean()
-      .exec();
+    const templateQuery = this.taskTemplateModel.find({ active: true });
+    if (session) {
+      templateQuery.session(session);
+    }
+    const templates = await templateQuery.lean().exec();
     if (templates.length === 0) {
       throw new InternalServerErrorException({
         error: 'TASK_TEMPLATES_EMPTY',
@@ -542,35 +551,25 @@ export class ActivityService {
     }
 
     const yesterdayYmd = addDaysToYmd(todayYmd, -1);
+    
+    let q1 = this.userDailyTaskModel.findOne({ date: yesterdayYmd, user_id: userId });
+    let q2 = this.userDailyTaskModel.find({ date: { $gte: addDaysToYmd(todayYmd, -120) }, user_id: userId });
+    let q3 = this.dailyActivityLogModel.find({ type: 'daily', user_id: userId }).sort({ date: -1 }).limit(7);
+    let q4 = this.carbonRecordModel.find({ user_id: userId }).sort({ date: -1 }).limit(90);
+
+    if (session) {
+      q1 = q1.session(session) as any;
+      q2 = q2.session(session) as any;
+      q3 = q3.session(session) as any;
+      q4 = q4.session(session) as any;
+    }
+
     const [yesterdayDoc, historyDocs, lastSevenLogs, recentCarbonRecords] =
       await Promise.all([
-        this.userDailyTaskModel
-          .findOne({ date: yesterdayYmd, user_id: userId })
-          .session(session)
-          .lean()
-          .exec(),
-        this.userDailyTaskModel
-          .find({
-            date: { $gte: addDaysToYmd(todayYmd, -120) },
-            user_id: userId,
-          })
-          .session(session)
-          .lean()
-          .exec(),
-        this.dailyActivityLogModel
-          .find({ type: 'daily', user_id: userId })
-          .sort({ date: -1 })
-          .limit(7)
-          .session(session)
-          .lean()
-          .exec(),
-        this.carbonRecordModel
-          .find({ user_id: userId })
-          .sort({ date: -1 })
-          .limit(90)
-          .session(session)
-          .lean()
-          .exec(),
+        q1.lean().exec(),
+        q2.lean().exec(),
+        q3.lean().exec(),
+        q4.lean().exec(),
       ]);
 
     const yesterdayTaskIds = new Set(
@@ -636,11 +635,12 @@ export class ActivityService {
         error && typeof error === 'object' && 'code' in error
           ? (error as { code?: number | string }).code
           : undefined;
-      if (code === 11_000 || code === '11000') {
-        const raced = await this.userDailyTaskModel
-          .findOne({ date: todayYmd, user_id: userId })
-          .session(session)
-          .exec();
+      if (code === 11_000 || code === '11000' || code === 112 || String(error).includes('WriteConflict') || String(error).includes('TransientTransactionError')) {
+        const raceQuery = this.userDailyTaskModel.findOne({ date: todayYmd, user_id: userId });
+        if (session) {
+          raceQuery.session(session);
+        }
+        const raced = await raceQuery.exec();
         if (raced) {
           return raced;
         }

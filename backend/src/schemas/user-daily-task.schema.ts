@@ -16,7 +16,7 @@ const UserDailyTaskItemSchema = new Schema(
     },
     completed_at: {
       type: Schema.Types.Mixed,
-      required: true,
+      default: null,
       validate: {
         validator: dateOrNull,
       },

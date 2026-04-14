@@ -59,7 +59,7 @@ export class AuthService {
           avg_ac_hours: 0,
           avg_distance: 0,
           avg_energy_usage: 0,
-          avg_transport_mode: '',
+          avg_transport_mode: 'none',
           eco_action_score: 0,
         },
         created_at: now,
@@ -73,7 +73,7 @@ export class AuthService {
           avg_ac_hours: 0,
           avg_distance: 0,
           avg_energy_usage: 0,
-          avg_transport_mode: '',
+          avg_transport_mode: 'none',
           diet_non_veg_day_fraction: 0,
           eco_action_score: 0,
           emission_trend: 'stable',
@@ -111,6 +111,7 @@ export class AuthService {
       };
     } catch (error) {
       await session.abortTransaction();
+      console.error('[AuthService.register] Transaction failed:', error);
       throw new InternalServerErrorException(
         'Unable to complete registration',
       );

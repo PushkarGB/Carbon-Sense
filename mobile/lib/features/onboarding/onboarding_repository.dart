@@ -1,0 +1,25 @@
+import 'package:dio/dio.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../../core/api/api_client.dart';
+import '../../core/api/api_error.dart';
+import 'onboarding_models.dart';
+
+class OnboardingRepository {
+  OnboardingRepository(this._dio);
+
+  final Dio _dio;
+
+  Future<void> complete(OnboardingDefaults defaults) async {
+    try {
+      await _dio.post('/onboarding/complete', data: defaults.toJson());
+    } catch (e) {
+      throw ApiError.fromDio(e);
+    }
+  }
+}
+
+final onboardingRepositoryProvider = Provider<OnboardingRepository>((ref) {
+  return OnboardingRepository(ref.watch(dioProvider));
+});
+

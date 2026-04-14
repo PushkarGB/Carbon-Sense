@@ -7,9 +7,11 @@ import 'package:lottie/lottie.dart';
 
 import '../../../core/api/api_error.dart';
 import '../../../core/lottie/lottie_assets.dart';
+import '../../../core/preferences/lifestyle_prefs.dart';
 import '../../dashboard/aqi_color.dart';
 import '../../dashboard/dashboard_controller.dart';
 import '../../dashboard/dashboard_models.dart';
+import '../../activity/ist_date.dart';
 
 class DashboardTab extends ConsumerWidget {
   const DashboardTab({super.key});
@@ -23,7 +25,7 @@ class DashboardTab extends ConsumerWidget {
         padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
         children: [
           state.when(
-            data: (home) => _DashboardBody(home: home),
+            data: (home) => _StreakPopupGate(child: _DashboardBody(home: home)),
             loading: () => _DashboardLoading(),
             error: (e, _) => _DashboardError(error: ApiError.fromDio(e)),
           ),
@@ -31,6 +33,57 @@ class DashboardTab extends ConsumerWidget {
       ),
     );
   }
+}
+
+class _StreakPopupGate extends ConsumerStatefulWidget {
+  const _StreakPopupGate({required this.child});
+  final Widget child;
+
+  @override
+  ConsumerState<_StreakPopupGate> createState() => _StreakPopupGateState();
+}
+
+class _StreakPopupGateState extends ConsumerState<_StreakPopupGate> {
+  bool _checked = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_checked) return;
+    _checked = true;
+    _maybeShow();
+  }
+
+  Future<void> _maybeShow() async {
+    final prefs = LifestylePrefs();
+    final today = todayIstYyyyMmDd();
+    final pending = await prefs.readStreakPopupPendingYmd();
+    final shown = await prefs.readStreakPopupShownYmd();
+    if (!mounted) return;
+
+    if (pending != today || shown == today) return;
+    final value = await prefs.readStreakPopupValue();
+    if (!mounted || value == null || value <= 0) return;
+
+    await showDialog<void>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Streak updated'),
+        content: Text('You’re on a $value-day streak.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Nice'),
+          ),
+        ],
+      ),
+    );
+
+    await prefs.writeStreakPopupShownYmd(today);
+  }
+
+  @override
+  Widget build(BuildContext context) => widget.child;
 }
 
 class _DashboardLoading extends StatelessWidget {
@@ -531,7 +584,7 @@ class _TasksProgressCard extends StatelessWidget {
     return Card(
       child: InkWell(
         borderRadius: BorderRadius.circular(12),
-        onTap: () => context.go('/shell/input'),
+        onTap: () => context.push('/tasks/today'),
         child: Padding(
           padding: const EdgeInsets.all(16),
           child: Column(

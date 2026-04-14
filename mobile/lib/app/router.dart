@@ -4,9 +4,11 @@ import 'package:go_router/go_router.dart';
 import '../features/auth/login_screen.dart';
 import '../features/auth/register_screen.dart';
 import '../features/activity/activity_wizard_screen.dart';
+import '../features/activity/weekly_reflection_screen.dart';
 import '../features/bootstrap/splash_screen.dart';
 import '../features/onboarding/onboarding_flow_screen.dart';
 import '../features/shell/shell_screen.dart';
+import '../features/tasks/tasks_today_screen.dart';
 
 final goRouterProvider = Provider<GoRouter>((ref) {
   return GoRouter(
@@ -35,8 +37,11 @@ final goRouterProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(
         path: '/input/weekly',
-        builder: (context, state) =>
-            const ActivityWizardScreen(type: ActivityType.weekly),
+        builder: (context, state) => const WeeklyReflectionScreen(),
+      ),
+      GoRoute(
+        path: '/tasks/today',
+        builder: (context, state) => const TodayTasksScreen(),
       ),
       GoRoute(
         path: '/shell/:tab',

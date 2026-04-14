@@ -5,6 +5,7 @@ import 'package:lottie/lottie.dart';
 
 import '../../core/api/api_error.dart';
 import '../../core/lottie/lottie_assets.dart';
+import '../../core/preferences/lifestyle_prefs.dart';
 import '../dashboard/dashboard_controller.dart';
 import '../tasks/tasks_controller.dart';
 import '../tasks/tasks_models.dart';
@@ -31,20 +32,21 @@ class _ActivityWizardScreenState extends ConsumerState<ActivityWizardScreen> {
   // Defaults (will be overwritten if onboarding_defaults exists)
   String _transportMode = 'car';
   double _transportDistance = 10;
-  double _electricityUnits = 5;
+  int _electricityProxy = 1; // 0 low | 1 normal | 2 high (relative to monthly baseline)
   double _acHours = 2;
   String _dietType = 'veg';
   int _mealsCount = 3;
   bool _wasteSegregation = true;
-  int _wasteBagsUsed = 1;
   final Set<String> _ecoActions = {};
 
   bool _didPrefill = false;
+  bool _didMonthCheck = false;
 
   @override
   Widget build(BuildContext context) {
     final dashboard = ref.watch(dashboardHomeProvider);
     final todayTasks = ref.watch(todayTasksProvider);
+    final prefs = LifestylePrefs();
 
     if (!_didPrefill) {
       dashboard.whenData((home) {
@@ -54,14 +56,49 @@ class _ActivityWizardScreenState extends ConsumerState<ActivityWizardScreen> {
           setState(() {
             _transportMode = d.transportMode;
             _transportDistance = d.avgDailyDistanceKm.toDouble();
-            _electricityUnits = d.electricityUnitsPerDay.toDouble();
             _acHours = d.acHoursPerDay.toDouble();
             _dietType = d.dietType;
             _mealsCount = d.mealsPerDay;
-            _wasteBagsUsed = d.wasteBagsPerDay;
           });
         }
         _didPrefill = true;
+      });
+    }
+
+    if (!_didMonthCheck && widget.type == ActivityType.daily) {
+      _didMonthCheck = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) async {
+        final yyyyMm = todayIstYyyyMm();
+        final lastWaste = await prefs.readWasteLastUpdatedYyyyMm();
+        final lastElec = await prefs.readElectricityLastUpdatedYyyyMm();
+        if (!mounted) return;
+
+        // Prompt at month-end / month-start to keep monthly baselines fresh.
+        if ((lastWaste != null && lastWaste != yyyyMm) ||
+            (lastElec != null && lastElec != yyyyMm)) {
+          await showDialog<void>(
+            context: context,
+            builder: (_) => AlertDialog(
+              title: const Text('Month changed'),
+              content: const Text(
+                'Your monthly baselines may have shifted. Update them so daily tracking stays accurate.',
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  child: const Text('Later'),
+                ),
+                TextButton(
+                  onPressed: () {
+                    Navigator.of(context).pop();
+                    context.push('/onboarding');
+                  },
+                  child: const Text('Update now'),
+                ),
+              ],
+            ),
+          );
+        }
       });
     }
 
@@ -166,7 +203,7 @@ class _ActivityWizardScreenState extends ConsumerState<ActivityWizardScreen> {
   Widget _movePage(BuildContext context) {
     return ListView(
       children: [
-        _q(context, 'How did you travel today?'),
+        _q(context, 'Which wheels carried you today?'),
         const SizedBox(height: 10),
         SegmentedButton<String>(
           segments: const [
@@ -181,7 +218,7 @@ class _ActivityWizardScreenState extends ConsumerState<ActivityWizardScreen> {
               _submitting ? null : (s) => setState(() => _transportMode = s.first),
         ),
         const SizedBox(height: 18),
-        _q(context, 'How far did the road take you?'),
+        _q(context, 'How far did your day stretch? (km)'),
         const SizedBox(height: 8),
         _label(context, '${_transportDistance.round()} km'),
         Slider(
@@ -197,27 +234,40 @@ class _ActivityWizardScreenState extends ConsumerState<ActivityWizardScreen> {
   }
 
   Widget _powerPage(BuildContext context) {
+    final isDaily = widget.type == ActivityType.daily;
     return ListView(
       children: [
-        _q(context, 'How many units lit up your day?'),
-        const SizedBox(height: 8),
-        _label(context, '${_electricityUnits.round()} kWh'),
-        Slider(
-          value: _electricityUnits,
-          min: 0,
-          max: 50,
-          divisions: 50,
-          label: '${_electricityUnits.round()}',
-          onChanged: _submitting ? null : (v) => setState(() => _electricityUnits = v),
+        _q(
+          context,
+          isDaily
+              ? 'How loud was the switchboard today?'
+              : 'Across this week, how loud was the switchboard (most days)?',
         ),
+        const SizedBox(height: 10),
+        SegmentedButton<int>(
+          segments: const [
+            ButtonSegment(value: 0, label: Text('Quiet')),
+            ButtonSegment(value: 1, label: Text('Normal')),
+            ButtonSegment(value: 2, label: Text('Loud')),
+          ],
+          selected: {_electricityProxy},
+          onSelectionChanged:
+              _submitting ? null : (s) => setState(() => _electricityProxy = s.first),
+        ),
+        const SizedBox(height: 10),
         Text(
-          'Tip: 1 unit = 1 kWh',
+          'We’ll compare this against your monthly baseline (from onboarding).',
           style: Theme.of(context).textTheme.bodySmall?.copyWith(
                 color: Theme.of(context).colorScheme.onSurfaceVariant,
               ),
         ),
         const SizedBox(height: 18),
-        _q(context, 'How long did the cool air flow?'),
+        _q(
+          context,
+          isDaily
+              ? 'How long did the cool air flow today?'
+              : 'Across this week, how long did the cool air flow (most days)?',
+        ),
         const SizedBox(height: 8),
         _label(context, '${_acHours.round()} hours'),
         Slider(
@@ -235,7 +285,7 @@ class _ActivityWizardScreenState extends ConsumerState<ActivityWizardScreen> {
   Widget _platePage(BuildContext context) {
     return ListView(
       children: [
-        _q(context, 'What was the vibe on your plate?'),
+        _q(context, 'What was the mood on your plate today?'),
         const SizedBox(height: 10),
         SegmentedButton<String>(
           segments: const [
@@ -248,7 +298,7 @@ class _ActivityWizardScreenState extends ConsumerState<ActivityWizardScreen> {
               _submitting ? null : (s) => setState(() => _dietType = s.first),
         ),
         const SizedBox(height: 18),
-        _q(context, 'How many meals today?'),
+        _q(context, 'How many meals did today hold?'),
         const SizedBox(height: 8),
         _stepper(
           context,
@@ -265,7 +315,12 @@ class _ActivityWizardScreenState extends ConsumerState<ActivityWizardScreen> {
   Widget _tossPage(BuildContext context) {
     return ListView(
       children: [
-        _q(context, 'Did you sort before you tossed?'),
+        _q(
+          context,
+          widget.type == ActivityType.daily
+              ? 'Did you sort before you tossed today?'
+              : 'Did you sort before you tossed (most days this week)?',
+        ),
         const SizedBox(height: 10),
         SwitchListTile.adaptive(
           contentPadding: EdgeInsets.zero,
@@ -273,20 +328,9 @@ class _ActivityWizardScreenState extends ConsumerState<ActivityWizardScreen> {
           onChanged: _submitting ? null : (v) => setState(() => _wasteSegregation = v),
           title: Text(_wasteSegregation ? 'Yes' : 'No'),
         ),
-        const SizedBox(height: 18),
-        _q(context, 'How many bags went out?'),
-        const SizedBox(height: 8),
-        _stepper(
-          context,
-          value: _wasteBagsUsed,
-          min: 0,
-          max: 10,
-          unit: 'bags',
-          onChanged: _submitting ? null : (v) => setState(() => _wasteBagsUsed = v),
-        ),
-        const SizedBox(height: 8),
+        const SizedBox(height: 10),
         Text(
-          '1 bag ≈ 1 kg',
+          'Waste quantity comes from your monthly baseline (you can update it at month-end).',
           style: Theme.of(context).textTheme.bodySmall?.copyWith(
                 color: Theme.of(context).colorScheme.onSurfaceVariant,
               ),
@@ -300,7 +344,7 @@ class _ActivityWizardScreenState extends ConsumerState<ActivityWizardScreen> {
 
     return ListView(
       children: [
-        _q(context, 'Any green moves today?'),
+        _q(context, 'Which green moves happened today?'),
         const SizedBox(height: 10),
         if (options.isEmpty)
           Card(
@@ -424,16 +468,30 @@ class _ActivityWizardScreenState extends ConsumerState<ActivityWizardScreen> {
       _errorText = null;
     });
 
+    final prefs = LifestylePrefs();
+    final yyyyMm = todayIstYyyyMm();
+    final monthlyUnits = await prefs.readElectricityUnitsPerMonth();
+    final monthlyWasteBags = await prefs.readWasteBagsPerMonth();
+
+    // Derived daily values used internally (never explicitly asked in daily log).
+    final baseUnitsPerDay = monthlyUnits == null ? 6 : (monthlyUnits / 30).round().clamp(0, 60);
+    final proxyMultiplier = switch (_electricityProxy) { 0 => 0.7, 1 => 1.0, _ => 1.3 };
+    final electricityUnits = (baseUnitsPerDay * proxyMultiplier).round().clamp(0, 80);
+
+    final baseWasteBagsPerDay = monthlyWasteBags == null
+        ? 1
+        : (monthlyWasteBags / 30).ceil().clamp(0, 10);
+
     final payload = ActivityPayload(
       date: todayIstYyyyMmDd(),
       transportMode: _transportMode,
       transportDistance: _transportDistance.round(),
-      electricityUnits: _electricityUnits.round(),
+      electricityUnits: electricityUnits,
       acHours: _acHours.round(),
       dietType: _dietType,
       mealsCount: _mealsCount,
       wasteSegregation: _wasteSegregation,
-      wasteBagsUsed: _wasteBagsUsed,
+      wasteBagsUsed: baseWasteBagsPerDay,
       ecoActions: _ecoActions.toList(growable: false),
     );
 
@@ -444,6 +502,14 @@ class _ActivityWizardScreenState extends ConsumerState<ActivityWizardScreen> {
           : await repo.submitWeekly(payload);
 
       if (!mounted) return;
+
+      // Local gating (UI-level) to prevent duplicates in the same day.
+      final today = todayIstYyyyMmDd();
+      if (widget.type == ActivityType.daily) {
+        await prefs.writeLastDailyLogYmd(today);
+      } else {
+        await prefs.writeLastWeeklyLogYmd(today);
+      }
 
       // Refresh dashboard + tasks after submission.
       ref.invalidate(dashboardHomeProvider);

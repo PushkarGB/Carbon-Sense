@@ -1,14 +1,20 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:lottie/lottie.dart';
 
 import '../../../core/lottie/lottie_assets.dart';
+import '../../../core/preferences/lifestyle_prefs.dart';
+import '../../activity/ist_date.dart';
+import '../../dashboard/dashboard_controller.dart';
 
-class InputTab extends StatelessWidget {
+class InputTab extends ConsumerWidget {
   const InputTab({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final today = todayIstYyyyMmDd();
+    final dashboard = ref.watch(dashboardHomeProvider);
     return SafeArea(
       child: ListView(
         padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
@@ -43,15 +49,22 @@ class InputTab extends StatelessWidget {
                   ),
                   const SizedBox(height: 6),
                   Text(
-                    'Log today’s movement, energy, food, and waste.',
+                    'A quick snapshot of today. No meter math.',
                     style: TextStyle(
                       color: Theme.of(context).colorScheme.onSurfaceVariant,
                     ),
                   ),
                   const SizedBox(height: 12),
-                  FilledButton(
-                    onPressed: () => context.push('/input/daily'),
-                    child: const Text('Start daily log'),
+                  FutureBuilder<String?>(
+                    future: LifestylePrefs().readLastDailyLogYmd(),
+                    builder: (context, snap) {
+                      final last = snap.data;
+                      final already = last == today;
+                      return FilledButton(
+                        onPressed: already ? null : () => context.push('/input/daily'),
+                        child: Text(already ? 'Daily log submitted' : 'Start daily log'),
+                      );
+                    },
                   ),
                 ],
               ),
@@ -72,15 +85,26 @@ class InputTab extends StatelessWidget {
                   ),
                   const SizedBox(height: 6),
                   Text(
-                    'Looking back at your week…',
+                    'A reflection layer. Works even if daily logs were missed.',
                     style: TextStyle(
                       color: Theme.of(context).colorScheme.onSurfaceVariant,
                     ),
                   ),
                   const SizedBox(height: 12),
-                  FilledButton.tonal(
-                    onPressed: () => context.push('/input/weekly'),
-                    child: const Text('Start weekly log'),
+                  FutureBuilder<String?>(
+                    future: LifestylePrefs().readLastWeeklyLogYmd(),
+                    builder: (context, snap) {
+                      final last = snap.data;
+                      final dashAlready = dashboard.maybeWhen(
+                        data: (h) => h.weeklyInsights.lastWeeklySubmissionDate == today,
+                        orElse: () => false,
+                      );
+                      final already = last == today || dashAlready;
+                      return FilledButton.tonal(
+                        onPressed: already ? null : () => context.push('/input/weekly'),
+                        child: Text(already ? 'Weekly log submitted' : 'Start weekly log'),
+                      );
+                    },
                   ),
                 ],
               ),

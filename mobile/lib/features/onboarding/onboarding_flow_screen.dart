@@ -5,6 +5,8 @@ import 'package:lottie/lottie.dart';
 
 import '../../core/lottie/lottie_assets.dart';
 import '../../core/api/api_error.dart';
+import '../../core/preferences/lifestyle_prefs.dart';
+import '../activity/ist_date.dart';
 import 'onboarding_models.dart';
 import 'onboarding_repository.dart';
 
@@ -22,13 +24,13 @@ class _OnboardingFlowScreenState extends ConsumerState<OnboardingFlowScreen> {
   String _transportMode = 'car';
   double _avgDailyDistance = 15;
 
-  double _electricityUnits = 5;
+  double _electricityUnitsPerMonth = 150;
   double _acHours = 2;
 
   String _dietType = 'veg';
   int _mealsPerDay = 3;
 
-  int _wasteBagsPerDay = 1;
+  int _wasteBagsPerMonth = 30;
 
   bool _submitting = false;
   String? _errorText;
@@ -39,18 +41,30 @@ class _OnboardingFlowScreenState extends ConsumerState<OnboardingFlowScreen> {
       _errorText = null;
     });
 
+    final yyyyMm = todayIstYyyyMm();
+
+    final monthlyKwh = _electricityUnitsPerMonth.round().clamp(0, 2000);
+    final monthlyWasteBags = _wasteBagsPerMonth.clamp(0, 300);
+
+    // Backend expects per-day defaults; derive from monthly inputs.
+    final electricityPerDay = (monthlyKwh / 30).round().clamp(0, 60);
+    final wasteBagsPerDay = (monthlyWasteBags / 30).ceil().clamp(0, 10);
+
     final defaults = OnboardingDefaults(
       transportMode: _transportMode,
       avgDailyDistanceKm: _avgDailyDistance.round(),
-      electricityUnitsPerDay: _electricityUnits.round(),
+      electricityUnitsPerDay: electricityPerDay,
       acHoursPerDay: _acHours.round(),
       dietType: _dietType,
       mealsPerDay: _mealsPerDay,
-      wasteBagsPerDay: _wasteBagsPerDay,
+      wasteBagsPerDay: wasteBagsPerDay,
     );
 
     try {
       await ref.read(onboardingRepositoryProvider).complete(defaults);
+      final prefs = LifestylePrefs();
+      await prefs.writeElectricityUnitsPerMonth(monthlyKwh, updatedYyyyMm: yyyyMm);
+      await prefs.writeWasteBagsPerMonth(monthlyWasteBags, updatedYyyyMm: yyyyMm);
       if (!mounted) return;
       context.go('/shell/dashboard');
     } catch (e) {
@@ -158,7 +172,7 @@ class _OnboardingFlowScreenState extends ConsumerState<OnboardingFlowScreen> {
   Widget _travelStep(BuildContext context) {
     return ListView(
       children: [
-        _questionTitle(context, 'How do you usually get around?'),
+        _questionTitle(context, 'Most days, what carries you?'),
         const SizedBox(height: 10),
         SegmentedButton<String>(
           segments: const [
@@ -173,7 +187,7 @@ class _OnboardingFlowScreenState extends ConsumerState<OnboardingFlowScreen> {
               _submitting ? null : (s) => setState(() => _transportMode = s.first),
         ),
         const SizedBox(height: 18),
-        _questionTitle(context, 'How far does your daily journey take you?'),
+        _questionTitle(context, 'How far does a typical day stretch? (km)'),
         const SizedBox(height: 8),
         _sliderLabel(context, '${_avgDailyDistance.round()} km'),
         Slider(
@@ -191,25 +205,25 @@ class _OnboardingFlowScreenState extends ConsumerState<OnboardingFlowScreen> {
   Widget _energyStep(BuildContext context) {
     return ListView(
       children: [
-        _questionTitle(context, 'How much power does your day use?'),
+        _questionTitle(context, 'What does your meter whisper in a month?'),
         const SizedBox(height: 8),
-        _sliderLabel(context, '${_electricityUnits.round()} kWh'),
+        _sliderLabel(context, '${_electricityUnitsPerMonth.round()} units / month'),
         Slider(
-          value: _electricityUnits,
+          value: _electricityUnitsPerMonth,
           min: 0,
-          max: 30,
-          divisions: 30,
-          label: '${_electricityUnits.round()}',
-          onChanged: _submitting ? null : (v) => setState(() => _electricityUnits = v),
+          max: 1200,
+          divisions: 120,
+          label: '${_electricityUnitsPerMonth.round()}',
+          onChanged: _submitting ? null : (v) => setState(() => _electricityUnitsPerMonth = v),
         ),
         Text(
-          'Tip: 1 unit = 1 kWh',
+          'Tip: “unit” = kWh (from your electricity bill). We’ll spread it across days.',
           style: Theme.of(context).textTheme.bodySmall?.copyWith(
                 color: Theme.of(context).colorScheme.onSurfaceVariant,
               ),
         ),
         const SizedBox(height: 18),
-        _questionTitle(context, 'How long does the cool breeze run?'),
+        _questionTitle(context, 'On a typical day, how long does the cool breeze run? (hours/day)'),
         const SizedBox(height: 8),
         _sliderLabel(context, '${_acHours.round()} hours'),
         Slider(
@@ -227,7 +241,7 @@ class _OnboardingFlowScreenState extends ConsumerState<OnboardingFlowScreen> {
   Widget _foodStep(BuildContext context) {
     return ListView(
       children: [
-        _questionTitle(context, "What's on your plate most days?"),
+        _questionTitle(context, "Most days, what’s on your plate?"),
         const SizedBox(height: 10),
         SegmentedButton<String>(
           segments: const [
@@ -240,7 +254,7 @@ class _OnboardingFlowScreenState extends ConsumerState<OnboardingFlowScreen> {
               _submitting ? null : (s) => setState(() => _dietType = s.first),
         ),
         const SizedBox(height: 18),
-        _questionTitle(context, 'How many meals fill your day?'),
+        _questionTitle(context, 'How many meals does a typical day hold?'),
         const SizedBox(height: 8),
         _stepperRow(
           context,
@@ -257,19 +271,19 @@ class _OnboardingFlowScreenState extends ConsumerState<OnboardingFlowScreen> {
   Widget _wasteStep(BuildContext context) {
     return ListView(
       children: [
-        _questionTitle(context, 'How many bags leave your doorstep?'),
+        _questionTitle(context, 'How many waste bags leave in a month?'),
         const SizedBox(height: 8),
         _stepperRow(
           context,
-          value: _wasteBagsPerDay,
+          value: _wasteBagsPerMonth,
           min: 0,
-          max: 10,
-          unit: 'bags',
-          onChanged: _submitting ? null : (v) => setState(() => _wasteBagsPerDay = v),
+          max: 300,
+          unit: 'bags / month',
+          onChanged: _submitting ? null : (v) => setState(() => _wasteBagsPerMonth = v),
         ),
         const SizedBox(height: 8),
         Text(
-          '1 bag ≈ 1 kg',
+          'Rough estimate is fine. We’ll turn this into a daily average internally.',
           style: Theme.of(context).textTheme.bodySmall?.copyWith(
                 color: Theme.of(context).colorScheme.onSurfaceVariant,
               ),

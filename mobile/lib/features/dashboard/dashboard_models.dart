@@ -6,6 +6,7 @@ class DashboardHome {
     required this.aqi,
     required this.tasksProgress,
     required this.performance,
+    required this.weeklyInsights,
     required this.onboardingCompleted,
     required this.onboardingDefaults,
     required this.projectionNext30Days,
@@ -17,6 +18,7 @@ class DashboardHome {
   final AqiReading? aqi;
   final TasksProgress? tasksProgress;
   final PerformanceMetrics performance;
+  final WeeklyInsightsLite weeklyInsights;
   final bool onboardingCompleted;
   final OnboardingDefaultsLite? onboardingDefaults;
   final List<double>? projectionNext30Days;
@@ -45,6 +47,9 @@ class DashboardHome {
       performance: PerformanceMetrics.fromJson(
         (json['performance_metrics'] ?? const {}) as Map<String, dynamic>,
       ),
+      weeklyInsights: WeeklyInsightsLite.fromJson(
+        (json['weekly_insights'] ?? const {}) as Map<String, dynamic>,
+      ),
       onboardingCompleted: json['onboarding_completed'] as bool? ?? true,
       onboardingDefaults: json['onboarding_defaults'] == null
           ? null
@@ -63,7 +68,7 @@ class DashboardHome {
         for (final item in next30) {
           if (item is num) values.add(item.toDouble());
           if (item is Map<String, dynamic>) {
-            final v = item['value'];
+            final v = item['predicted_emission'] ?? item['value'];
             if (v is num) values.add(v.toDouble());
           }
         }
@@ -71,6 +76,23 @@ class DashboardHome {
       }
     }
     return null;
+  }
+}
+
+class WeeklyInsightsLite {
+  WeeklyInsightsLite({
+    required this.totalWeeksLogged,
+    required this.lastWeeklySubmissionDate,
+  });
+
+  final int totalWeeksLogged;
+  final String lastWeeklySubmissionDate; // YYYY-MM-DD (IST)
+
+  factory WeeklyInsightsLite.fromJson(Map<String, dynamic> json) {
+    return WeeklyInsightsLite(
+      totalWeeksLogged: (json['total_weeks_logged'] as num?)?.toInt() ?? 0,
+      lastWeeklySubmissionDate: (json['last_weekly_submission_date'] ?? '1970-01-01') as String,
+    );
   }
 }
 

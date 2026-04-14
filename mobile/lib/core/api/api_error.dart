@@ -7,6 +7,7 @@ class ApiError implements Exception {
   final String message;
 
   static ApiError fromDio(Object error) {
+    if (error is ApiError) return error;
     if (error is DioException) {
       final data = error.response?.data;
       if (data is Map<String, dynamic>) {

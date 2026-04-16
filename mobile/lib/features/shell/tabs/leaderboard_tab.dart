@@ -15,10 +15,20 @@ class LeaderboardTab extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final scope = ref.watch(leaderboardScopeProvider);
     final state = ref.watch(leaderboardProvider);
+    final width = MediaQuery.sizeOf(context).width;
+    final heroHeight = (width * 0.28).clamp(84.0, 140.0);
 
     return SafeArea(
       child: Column(
         children: [
+          SizedBox(
+            height: heroHeight,
+            child: LottieBuilder.asset(
+              LottieAssets.leaderboardHeaderPlaceholder,
+              repeat: true,
+              fit: BoxFit.contain,
+            ),
+          ),
           Padding(
             padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
             child: Row(
@@ -27,8 +37,8 @@ class LeaderboardTab extends ConsumerWidget {
                   child: Text(
                     'Leaderboard',
                     style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                          fontWeight: FontWeight.w800,
-                        ),
+                      fontWeight: FontWeight.w800,
+                    ),
                   ),
                 ),
                 SegmentedButton<String>(
@@ -38,7 +48,8 @@ class LeaderboardTab extends ConsumerWidget {
                   ],
                   selected: {scope},
                   onSelectionChanged: (s) =>
-                      ref.read(leaderboardScopeProvider.notifier).state = s.first,
+                      ref.read(leaderboardScopeProvider.notifier).state =
+                          s.first,
                 ),
                 const SizedBox(width: 8),
                 IconButton(
@@ -57,7 +68,10 @@ class LeaderboardTab extends ConsumerWidget {
           Expanded(
             child: state.when(
               data: (list) => _LeaderboardList(entries: list),
-              loading: () => _CenterLottie(text: 'Loading leaderboard…', asset: LottieAssets.loading),
+              loading: () => _CenterLottie(
+                text: 'Loading leaderboard…',
+                asset: LottieAssets.loading,
+              ),
               error: (e, _) => _LeaderboardError(error: ApiError.fromDio(e)),
             ),
           ),
@@ -109,12 +123,17 @@ class _LeaderboardList extends ConsumerWidget {
                   ),
                   Text(
                     'avg kg',
-                    style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant),
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
                   ),
                 ],
               ),
               onTap: null,
-              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 12,
+                vertical: 4,
+              ),
             ),
           );
         },
@@ -192,7 +211,11 @@ class _CenterLottie extends StatelessWidget {
             SizedBox(
               height: 160,
               width: 160,
-              child: LottieBuilder.asset(asset, repeat: repeat, fit: BoxFit.contain),
+              child: LottieBuilder.asset(
+                asset,
+                repeat: repeat,
+                fit: BoxFit.contain,
+              ),
             ),
             const SizedBox(height: 10),
             Text(text, textAlign: TextAlign.center),

@@ -18,24 +18,35 @@ class InsightsTab extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     // v1 awareness: viewing Insights screen can unlock awareness tasks.
     ref.read(awarenessSignalsProvider).sendOnce(
-          'insights_screen_viewed',
-          const {'insights_screen_viewed': true},
-        );
+      'insights_screen_viewed',
+      const {'insights_screen_viewed': true},
+    );
 
     final state = ref.watch(insightsSummaryProvider);
+    final width = MediaQuery.sizeOf(context).width;
+    final heroHeight = (width * 0.30).clamp(90.0, 150.0);
 
     return SafeArea(
       child: ListView(
         padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
         children: [
+          SizedBox(
+            height: heroHeight,
+            child: LottieBuilder.asset(
+              LottieAssets.insightsHeaderPlaceholder,
+              repeat: true,
+              fit: BoxFit.contain,
+            ),
+          ),
+          const SizedBox(height: 8),
           Row(
             children: [
               Expanded(
                 child: Text(
                   'Insights',
                   style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                        fontWeight: FontWeight.w800,
-                      ),
+                    fontWeight: FontWeight.w800,
+                  ),
                 ),
               ),
               SegmentedButton<int>(
@@ -44,7 +55,8 @@ class InsightsTab extends ConsumerWidget {
                   ButtonSegment(value: 30, label: Text('30d')),
                 ],
                 selected: {ref.watch(insightsRangeProvider)},
-                onSelectionChanged: (s) => ref.read(insightsRangeProvider.notifier).state = s.first,
+                onSelectionChanged: (s) =>
+                    ref.read(insightsRangeProvider.notifier).state = s.first,
               ),
             ],
           ),
@@ -117,8 +129,8 @@ class _InsightsError extends StatelessWidget {
                   Text(
                     'Couldn’t load insights',
                     style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.w800,
-                        ),
+                      fontWeight: FontWeight.w800,
+                    ),
                   ),
                   const SizedBox(height: 4),
                   Text(
@@ -147,7 +159,10 @@ class _InsightsBody extends ConsumerWidget {
 
     final maxY = emissions.isEmpty
         ? 1.0
-        : emissions.map((e) => e.totalEmission).reduce((a, b) => a > b ? a : b) * 1.15;
+        : emissions
+                  .map((e) => e.totalEmission)
+                  .reduce((a, b) => a > b ? a : b) *
+              1.15;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -161,38 +176,52 @@ class _InsightsBody extends ConsumerWidget {
                 Text(
                   'Emissions',
                   style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.w800,
-                      ),
-                ),
-                const SizedBox(height: 12),
-                SizedBox(
-                  height: 180,
-                  child: LineChart(
-                    LineChartData(
-                      gridData: const FlGridData(show: false),
-                      titlesData: const FlTitlesData(show: false),
-                      borderData: FlBorderData(show: false),
-                      minY: 0,
-                      maxY: maxY,
-                      lineBarsData: [
-                        LineChartBarData(
-                          spots: [
-                            for (var i = 0; i < emissions.length; i++)
-                              FlSpot(i.toDouble(), emissions[i].totalEmission),
-                          ],
-                          isCurved: true,
-                          color: cs.primary,
-                          barWidth: 3,
-                          dotData: const FlDotData(show: false),
-                          belowBarData: BarAreaData(
-                            show: true,
-                            color: cs.primary.withValues(alpha: 0.12),
-                          ),
-                        ),
-                      ],
-                    ),
+                    fontWeight: FontWeight.w800,
                   ),
                 ),
+                const SizedBox(height: 12),
+                if (emissions.isEmpty)
+                  SizedBox(
+                    height: 150,
+                    child: Center(
+                      child: Text(
+                        'No emissions logged in this range yet.',
+                        style: TextStyle(color: cs.onSurfaceVariant),
+                      ),
+                    ),
+                  )
+                else
+                  SizedBox(
+                    height: 180,
+                    child: LineChart(
+                      LineChartData(
+                        gridData: const FlGridData(show: false),
+                        titlesData: const FlTitlesData(show: false),
+                        borderData: FlBorderData(show: false),
+                        minY: 0,
+                        maxY: maxY,
+                        lineBarsData: [
+                          LineChartBarData(
+                            spots: [
+                              for (var i = 0; i < emissions.length; i++)
+                                FlSpot(
+                                  i.toDouble(),
+                                  emissions[i].totalEmission,
+                                ),
+                            ],
+                            isCurved: true,
+                            color: cs.primary,
+                            barWidth: 3,
+                            dotData: const FlDotData(show: false),
+                            belowBarData: BarAreaData(
+                              show: true,
+                              color: cs.primary.withValues(alpha: 0.12),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
               ],
             ),
           ),
@@ -221,11 +250,17 @@ class _SummaryGrid extends StatelessWidget {
   Widget build(BuildContext context) {
     return Row(
       children: [
-        Expanded(child: _StatCard(label: 'Average', value: summary.averageEmission)),
+        Expanded(
+          child: _StatCard(label: 'Average', value: summary.averageEmission),
+        ),
         const SizedBox(width: 12),
-        Expanded(child: _StatCard(label: 'Min', value: summary.minEmission)),
+        Expanded(
+          child: _StatCard(label: 'Total', value: summary.totalEmission),
+        ),
         const SizedBox(width: 12),
-        Expanded(child: _StatCard(label: 'Max', value: summary.maxEmission)),
+        Expanded(
+          child: _StatCard(label: 'Max', value: summary.maxEmission),
+        ),
       ],
     );
   }
@@ -250,9 +285,9 @@ class _StatCard extends StatelessWidget {
             const SizedBox(height: 4),
             Text(
               '${value.toStringAsFixed(1)} kg',
-              style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.w900,
-                  ),
+              style: Theme.of(
+                context,
+              ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w900),
             ),
           ],
         ),
@@ -275,7 +310,8 @@ class _ComparisonCard extends ConsumerWidget {
       final last = summary.emissions.last;
       today = last.totalEmission;
       if (summary.emissions.length >= 2) {
-        yesterday = summary.emissions[summary.emissions.length - 2].totalEmission;
+        yesterday =
+            summary.emissions[summary.emissions.length - 2].totalEmission;
       }
     }
 
@@ -285,9 +321,9 @@ class _ComparisonCard extends ConsumerWidget {
 
     Future<void> fire() async {
       await ref.read(awarenessSignalsProvider).sendOnce(
-            'comparison_viewed',
-            const {'comparison_viewed': true},
-          );
+        'comparison_viewed',
+        const {'comparison_viewed': true},
+      );
     }
 
     return VisibilityDetector(
@@ -309,8 +345,8 @@ class _ComparisonCard extends ConsumerWidget {
                 Text(
                   'Today vs Yesterday',
                   style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.w800,
-                      ),
+                    fontWeight: FontWeight.w800,
+                  ),
                 ),
                 const SizedBox(height: 10),
                 Row(
@@ -382,10 +418,9 @@ class _TrendCard extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     Future<void> fire() async {
-      await ref.read(awarenessSignalsProvider).sendOnce(
-            'trend_viewed',
-            const {'trend_viewed': true},
-          );
+      await ref.read(awarenessSignalsProvider).sendOnce('trend_viewed', const {
+        'trend_viewed': true,
+      });
     }
 
     final trend = summary.trend;
@@ -408,7 +443,11 @@ class _TrendCard extends ConsumerWidget {
             padding: const EdgeInsets.all(16),
             child: Row(
               children: [
-                Icon(icon, size: 30, color: Theme.of(context).colorScheme.primary),
+                Icon(
+                  icon,
+                  size: 30,
+                  color: Theme.of(context).colorScheme.primary,
+                ),
                 const SizedBox(width: 10),
                 Expanded(
                   child: Column(
@@ -416,9 +455,8 @@ class _TrendCard extends ConsumerWidget {
                     children: [
                       Text(
                         'Weekly Trend',
-                        style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                              fontWeight: FontWeight.w800,
-                            ),
+                        style: Theme.of(context).textTheme.titleMedium
+                            ?.copyWith(fontWeight: FontWeight.w800),
                       ),
                       const SizedBox(height: 4),
                       Text(
@@ -482,8 +520,9 @@ class _BreakdownCard extends StatelessWidget {
       const Color(0xFFEB5757),
       const Color(0xFF9B51E0),
     ];
-    final entries = latest!.percentages.entries.where((e) => e.value > 0).toList()
-      ..sort((a, b) => b.value.compareTo(a.value));
+    final entries =
+        latest!.percentages.entries.where((e) => e.value > 0).toList()
+          ..sort((a, b) => b.value.compareTo(a.value));
 
     return Card(
       child: Padding(
@@ -492,10 +531,10 @@ class _BreakdownCard extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'Latest breakdown',
-              style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.w800,
-                  ),
+              'Carbon shadow (latest breakdown)',
+              style: Theme.of(
+                context,
+              ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
             ),
             const SizedBox(height: 12),
             SizedBox(
@@ -573,18 +612,24 @@ class _AqiCard extends StatelessWidget {
           children: [
             Text(
               'Air quality (AQI)',
-              style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.w800,
-                  ),
+              style: Theme.of(
+                context,
+              ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
             ),
             const SizedBox(height: 10),
             if (aqi == null)
-              Text('AQI unavailable', style: TextStyle(color: cs.onSurfaceVariant))
+              Text(
+                'AQI unavailable',
+                style: TextStyle(color: cs.onSurfaceVariant),
+              )
             else
               Row(
                 children: [
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 10,
+                    ),
                     decoration: BoxDecoration(
                       color: aqiColor(aqi!.aqi),
                       borderRadius: BorderRadius.circular(14),
@@ -650,4 +695,3 @@ class _AqiCard extends StatelessWidget {
     );
   }
 }
-

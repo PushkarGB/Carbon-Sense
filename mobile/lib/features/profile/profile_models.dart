@@ -20,14 +20,23 @@ class ProfileResponse {
       }
     }
 
+    final profile =
+        (json['profile'] ?? const <String, dynamic>{}) as Map<String, dynamic>;
+    final profilePerf =
+        (profile['performance_metrics'] ?? const <String, dynamic>{})
+            as Map<String, dynamic>;
+    final profileStreak = (profile['streak_days'] as num?)?.toInt() ?? 0;
+
     return ProfileResponse(
-      user: ProfileUser.fromJson((json['user'] ?? const {}) as Map<String, dynamic>),
-      summary:
-          ProfileSummary.fromJson((json['summary'] ?? const {}) as Map<String, dynamic>),
-      badges: badges,
-      performance: PerformanceMetricsLite.fromJson(
-        (json['performance_metrics'] ?? const {}) as Map<String, dynamic>,
+      user: ProfileUser.fromJson(
+        (json['user'] ?? const {}) as Map<String, dynamic>,
       ),
+      summary: ProfileSummary.fromJson(
+        (json['summary'] ?? const {}) as Map<String, dynamic>,
+        fallbackStreakDays: profileStreak,
+      ),
+      badges: badges,
+      performance: PerformanceMetricsLite.fromJson(profilePerf),
     );
   }
 }
@@ -73,9 +82,12 @@ class ProfileSummary {
   final double avgEmission;
   final double reductionPercent;
 
-  factory ProfileSummary.fromJson(Map<String, dynamic> json) {
+  factory ProfileSummary.fromJson(
+    Map<String, dynamic> json, {
+    int fallbackStreakDays = 0,
+  }) {
     return ProfileSummary(
-      streakDays: (json['streak_days'] as num?)?.toInt() ?? 0,
+      streakDays: (json['streak_days'] as num?)?.toInt() ?? fallbackStreakDays,
       totalDaysLogged: (json['total_days_logged'] as num?)?.toInt() ?? 0,
       badgesUnlocked: (json['badges_unlocked'] as num?)?.toInt() ?? 0,
       avgEmission: (json['avg_emission'] as num?)?.toDouble() ?? 0,
@@ -130,9 +142,9 @@ class PerformanceMetricsLite {
     return PerformanceMetricsLite(
       baselineEmission: (json['baseline_emission'] as num?)?.toDouble() ?? 0,
       baselineStatus: (json['baseline_status'] ?? '') as String,
-      currentAvgEmission: (json['current_avg_emission'] as num?)?.toDouble() ?? 0,
+      currentAvgEmission:
+          (json['current_avg_emission'] as num?)?.toDouble() ?? 0,
       reductionPercent: (json['reduction_percent'] as num?)?.toDouble() ?? 0,
     );
   }
 }
-

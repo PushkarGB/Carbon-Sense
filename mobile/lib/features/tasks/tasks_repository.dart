@@ -18,6 +18,15 @@ class TasksRepository {
       throw ApiError.fromDio(e);
     }
   }
+
+    Future<void> completeTask(String taskId) async {
+    try {
+      await _dio.post('/tasks/complete', data: {'task_id': taskId});
+    } catch (e) {
+      throw ApiError.fromDio(e);
+    }
+  }
+  
 }
 
 final tasksRepositoryProvider = Provider<TasksRepository>((ref) {

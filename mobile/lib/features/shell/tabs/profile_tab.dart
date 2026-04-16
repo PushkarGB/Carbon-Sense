@@ -8,22 +8,78 @@ import '../../../core/lottie/lottie_assets.dart';
 import '../../profile/profile_controller.dart';
 import '../../profile/profile_models.dart';
 
-class ProfileTab extends ConsumerWidget {
+class ProfileTab extends ConsumerStatefulWidget {
   const ProfileTab({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<ProfileTab> createState() => _ProfileTabState();
+}
+
+class _ProfileTabState extends ConsumerState<ProfileTab> {
+  int? _lastBadgeCount;
+
+  @override
+  Widget build(BuildContext context) {
     final state = ref.watch(profileProvider);
+    final width = MediaQuery.sizeOf(context).width;
+    final heroHeight = (width * 0.30).clamp(90.0, 150.0);
+    ref.listen(profileProvider, (_, next) {
+      next.whenData((profile) async {
+        final current = profile.summary.badgesUnlocked;
+        if (_lastBadgeCount != null &&
+            current > (_lastBadgeCount ?? 0) &&
+            mounted) {
+          await showDialog<void>(
+            context: context,
+            builder: (_) => AlertDialog(
+              title: const Text('Badge unlocked'),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  SizedBox(
+                    height: 100,
+                    width: 100,
+                    child: LottieBuilder.asset(
+                      LottieAssets.success,
+                      repeat: false,
+                      fit: BoxFit.contain,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text('You earned a new badge. Keep going!'),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  child: const Text('Nice'),
+                ),
+              ],
+            ),
+          );
+        }
+        _lastBadgeCount = current;
+      });
+    });
 
     return SafeArea(
       child: ListView(
         padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
         children: [
+          SizedBox(
+            height: heroHeight,
+            child: LottieBuilder.asset(
+              LottieAssets.profileHeaderPlaceholder,
+              repeat: true,
+              fit: BoxFit.contain,
+            ),
+          ),
+          const SizedBox(height: 8),
           Text(
             'Profile',
-            style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                  fontWeight: FontWeight.w800,
-                ),
+            style: Theme.of(
+              context,
+            ).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w800),
           ),
           const SizedBox(height: 14),
           state.when(
@@ -94,11 +150,14 @@ class _ErrorCard extends StatelessWidget {
                   Text(
                     'Couldn’t load profile',
                     style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.w800,
-                        ),
+                      fontWeight: FontWeight.w800,
+                    ),
                   ),
                   const SizedBox(height: 4),
-                  Text(error.message, style: TextStyle(color: cs.onSurfaceVariant)),
+                  Text(
+                    error.message,
+                    style: TextStyle(color: cs.onSurfaceVariant),
+                  ),
                 ],
               ),
             ),
@@ -149,7 +208,9 @@ class _ProfileHeader extends StatelessWidget {
               child: SizedBox(
                 height: 68,
                 width: 68,
-                child: user.profilePictureUrl == null || user.profilePictureUrl!.isEmpty
+                child:
+                    user.profilePictureUrl == null ||
+                        user.profilePictureUrl!.isEmpty
                     ? ColoredBox(
                         color: cs.secondaryContainer,
                         child: Center(
@@ -181,8 +242,8 @@ class _ProfileHeader extends StatelessWidget {
                   Text(
                     user.name,
                     style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                          fontWeight: FontWeight.w900,
-                        ),
+                      fontWeight: FontWeight.w900,
+                    ),
                   ),
                   const SizedBox(height: 4),
                   Text(
@@ -207,7 +268,11 @@ class _ProfileHeader extends StatelessWidget {
   }
 
   String _initials(String name) {
-    final parts = name.trim().split(RegExp(r'\s+')).where((p) => p.isNotEmpty).toList();
+    final parts = name
+        .trim()
+        .split(RegExp(r'\s+'))
+        .where((p) => p.isNotEmpty)
+        .toList();
     if (parts.isEmpty) return '?';
     return parts.take(2).map((p) => p[0].toUpperCase()).join();
   }
@@ -222,11 +287,20 @@ class _StatsRow extends StatelessWidget {
   Widget build(BuildContext context) {
     return Row(
       children: [
-        Expanded(child: _Stat(label: 'Streak', value: '${summary.streakDays}')),
+        Expanded(
+          child: _Stat(label: 'Streak', value: '${summary.streakDays}'),
+        ),
         const SizedBox(width: 12),
-        Expanded(child: _Stat(label: 'Days logged', value: '${summary.totalDaysLogged}')),
+        Expanded(
+          child: _Stat(
+            label: 'Days logged',
+            value: '${summary.totalDaysLogged}',
+          ),
+        ),
         const SizedBox(width: 12),
-        Expanded(child: _Stat(label: 'Badges', value: '${summary.badgesUnlocked}')),
+        Expanded(
+          child: _Stat(label: 'Badges', value: '${summary.badgesUnlocked}'),
+        ),
       ],
     );
   }
@@ -251,9 +325,9 @@ class _Stat extends StatelessWidget {
             const SizedBox(height: 4),
             Text(
               value,
-              style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                    fontWeight: FontWeight.w900,
-                  ),
+              style: Theme.of(
+                context,
+              ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w900),
             ),
           ],
         ),
@@ -281,9 +355,9 @@ class _Performance extends StatelessWidget {
           children: [
             Text(
               'Performance',
-              style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.w800,
-                  ),
+              style: Theme.of(
+                context,
+              ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
             ),
             const SizedBox(height: 10),
             Row(
@@ -327,7 +401,10 @@ class _Performance extends StatelessWidget {
                   ),
                   Text(
                     perf.baselineStatus,
-                    style: TextStyle(color: cs.onSurfaceVariant, fontWeight: FontWeight.w700),
+                    style: TextStyle(
+                      color: cs.onSurfaceVariant,
+                      fontWeight: FontWeight.w700,
+                    ),
                   ),
                 ],
               ),
@@ -338,7 +415,11 @@ class _Performance extends StatelessWidget {
     );
   }
 
-  Widget _perfMetric(BuildContext context, {required String label, required String value}) {
+  Widget _perfMetric(
+    BuildContext context, {
+    required String label,
+    required String value,
+  }) {
     final cs = Theme.of(context).colorScheme;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
@@ -353,9 +434,9 @@ class _Performance extends StatelessWidget {
           const SizedBox(height: 2),
           Text(
             '$value kg',
-            style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                  fontWeight: FontWeight.w900,
-                ),
+            style: Theme.of(
+              context,
+            ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w900),
           ),
         ],
       ),
@@ -382,9 +463,9 @@ class _BadgeGallery extends StatelessWidget {
           children: [
             Text(
               'Badges',
-              style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.w800,
-                  ),
+              style: Theme.of(
+                context,
+              ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
             ),
             const SizedBox(height: 12),
             if (ordered.isEmpty)
@@ -463,9 +544,13 @@ class _BadgeTile extends StatelessWidget {
                   Center(
                     child: badge.iconUrl.isEmpty
                         ? Icon(
-                            badge.achieved ? Icons.verified : Icons.lock_outline,
+                            badge.achieved
+                                ? Icons.verified
+                                : Icons.lock_outline,
                             size: 34,
-                            color: badge.achieved ? cs.primary : cs.onSurfaceVariant,
+                            color: badge.achieved
+                                ? cs.primary
+                                : cs.onSurfaceVariant,
                           )
                         : Opacity(
                             opacity: badge.achieved ? 1 : 0.35,
@@ -473,9 +558,13 @@ class _BadgeTile extends StatelessWidget {
                               imageUrl: badge.iconUrl,
                               fit: BoxFit.contain,
                               errorWidget: (context, url, error) => Icon(
-                                badge.achieved ? Icons.verified : Icons.lock_outline,
+                                badge.achieved
+                                    ? Icons.verified
+                                    : Icons.lock_outline,
                                 size: 34,
-                                color: badge.achieved ? cs.primary : cs.onSurfaceVariant,
+                                color: badge.achieved
+                                    ? cs.primary
+                                    : cs.onSurfaceVariant,
                               ),
                             ),
                           ),

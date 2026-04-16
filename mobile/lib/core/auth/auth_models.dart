@@ -6,6 +6,7 @@ class AuthUser {
     required this.role,
     required this.profilePictureUrl,
     required this.onboardingCompleted,
+    required this.createdAt,
   });
 
   final String name;
@@ -14,6 +15,7 @@ class AuthUser {
   final String role;
   final String? profilePictureUrl;
   final bool? onboardingCompleted;
+  final DateTime? createdAt;
 
   factory AuthUser.fromJson(Map<String, dynamic> json) {
     return AuthUser(
@@ -23,6 +25,7 @@ class AuthUser {
       role: (json['role'] ?? '') as String,
       profilePictureUrl: json['profile_picture_url'] as String?,
       onboardingCompleted: json['onboarding_completed'] as bool?,
+      createdAt: DateTime.tryParse((json['created_at'] ?? '').toString()),
     );
   }
 }
@@ -36,8 +39,9 @@ class AuthSession {
   factory AuthSession.fromJson(Map<String, dynamic> json) {
     return AuthSession(
       token: (json['access_token'] ?? '') as String,
-      user: AuthUser.fromJson((json['user'] ?? const {}) as Map<String, dynamic>),
+      user: AuthUser.fromJson(
+        (json['user'] ?? const {}) as Map<String, dynamic>,
+      ),
     );
   }
 }
-

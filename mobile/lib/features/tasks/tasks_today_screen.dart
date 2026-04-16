@@ -56,6 +56,7 @@ class TodayTasksScreen extends ConsumerWidget {
   }
 }
 
+
 class _TasksList extends StatelessWidget {
   const _TasksList({required this.tasks});
 
@@ -93,7 +94,7 @@ class _TasksList extends StatelessWidget {
     return ListView.separated(
       padding: const EdgeInsets.fromLTRB(12, 12, 12, 16),
       itemCount: tasks.length,
-      separatorBuilder: (_, __) => const SizedBox(height: 8),
+      separatorBuilder: (_, index) => const SizedBox(height: 8),
       itemBuilder: (context, i) {
         final t = tasks[i];
         final completed = t.status == 'completed';
@@ -107,12 +108,19 @@ class _TasksList extends StatelessWidget {
             ),
             title: Text(
               _prettyTaskTitle(t),
-              style: TextStyle(fontWeight: completed ? FontWeight.w700 : FontWeight.w900),
+              style: TextStyle(
+                fontWeight: completed ? FontWeight.w700 : FontWeight.w900,
+              ),
             ),
             subtitle: Text(
-              _prettyTaskMeta(t),
+              'Tap to reveal',
               style: TextStyle(color: cs.onSurfaceVariant),
             ),
+            trailing: Icon(
+              Icons.keyboard_arrow_right,
+              color: cs.onSurfaceVariant,
+            ),
+            onTap: () => _showTaskDetails(context, t),
           ),
         );
       },
@@ -146,5 +154,43 @@ class _TasksList extends StatelessWidget {
     };
     return '$cat • $type';
   }
-}
 
+  Future<void> _showTaskDetails(BuildContext context, TaskItem t) async {
+    final cs = Theme.of(context).colorScheme;
+    final labels = <String>[
+      _prettyTaskMeta(t),
+      t.status == 'completed' ? 'Completed' : 'Pending',
+    ];
+
+    await showDialog<void>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: Text(_prettyTaskTitle(t)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              t.description.trim().isEmpty
+                  ? 'No description is available for this task yet.'
+                  : t.description,
+              style: TextStyle(color: cs.onSurfaceVariant),
+            ),
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [for (final label in labels) Chip(label: Text(label))],
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
+  }
+}

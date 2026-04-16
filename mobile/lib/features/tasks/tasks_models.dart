@@ -22,6 +22,7 @@ class TaskItem {
     required this.title,
     required this.status,
     required this.completionType,
+    required this.description,
   });
 
   final String taskId;
@@ -29,6 +30,7 @@ class TaskItem {
   final String title;
   final String status; // pending | completed
   final String completionType; // auto | manual | hybrid
+  final String description;
 
   factory TaskItem.fromJson(Map<String, dynamic> json) {
     return TaskItem(
@@ -37,7 +39,7 @@ class TaskItem {
       title: (json['title'] ?? '') as String,
       status: (json['status'] ?? '') as String,
       completionType: (json['completion_type'] ?? '') as String,
+      description: (json['description'] ?? '') as String,
     );
   }
 }
-

@@ -1,7 +1,7 @@
 class AppConfig {
   static const String apiBaseUrl = String.fromEnvironment(
     'API_BASE_URL',
-    defaultValue: 'http://10.10.15.248:5000',
+    defaultValue: 'http://10.10.11.124:5000',
   );
 
   static const String cloudinaryCloudName = String.fromEnvironment(

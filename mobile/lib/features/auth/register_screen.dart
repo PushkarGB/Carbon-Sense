@@ -188,17 +188,21 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                   .toList(growable: false),
             ),
             const SizedBox(height: 12),
-            SegmentedButton<String>(
-              segments: const [
-                ButtonSegment(value: 'student', label: Text('Student')),
-                ButtonSegment(
-                  value: 'working_professional',
-                  label: Text('Working Professional'),
-                ),
-                ButtonSegment(value: 'other', label: Text('Other')),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                for (final item in const [
+                  ('student', 'Student'),
+                  ('working_professional', 'Working Professional'),
+                  ('other', 'Other'),
+                ])
+                  ChoiceChip(
+                    label: Text(item.$2),
+                    selected: _role == item.$1,
+                    onSelected: (_) => setState(() => _role = item.$1),
+                  ),
               ],
-              selected: {_role},
-              onSelectionChanged: (s) => setState(() => _role = s.first),
             ),
             const SizedBox(height: 12),
             ListTile(

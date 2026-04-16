@@ -28,7 +28,8 @@ class DashboardHome {
       user: DashboardUser.fromJson(
         (json['user'] ?? const {}) as Map<String, dynamic>,
       ),
-      streakDays: ((json['streak'] ?? const {}) as Map<String, dynamic>)['streak_days']
+      streakDays:
+          ((json['streak'] ?? const {}) as Map<String, dynamic>)['streak_days']
               as int? ??
           0,
       todayEmission: json['today_emission'] == null
@@ -91,7 +92,8 @@ class WeeklyInsightsLite {
   factory WeeklyInsightsLite.fromJson(Map<String, dynamic> json) {
     return WeeklyInsightsLite(
       totalWeeksLogged: (json['total_weeks_logged'] as num?)?.toInt() ?? 0,
-      lastWeeklySubmissionDate: (json['last_weekly_submission_date'] ?? '1970-01-01') as String,
+      lastWeeklySubmissionDate:
+          (json['last_weekly_submission_date'] ?? '1970-01-01') as String,
     );
   }
 }
@@ -118,7 +120,8 @@ class OnboardingDefaultsLite {
   factory OnboardingDefaultsLite.fromJson(Map<String, dynamic> json) {
     return OnboardingDefaultsLite(
       transportMode: (json['transport_mode'] ?? 'car') as String,
-      avgDailyDistanceKm: (json['avg_daily_distance_km'] as num?)?.toInt() ?? 15,
+      avgDailyDistanceKm:
+          (json['avg_daily_distance_km'] as num?)?.toInt() ?? 15,
       electricityUnitsPerDay:
           (json['electricity_units_per_day'] as num?)?.toInt() ?? 5,
       acHoursPerDay: (json['ac_hours_per_day'] as num?)?.toInt() ?? 2,
@@ -136,6 +139,7 @@ class DashboardUser {
     required this.city,
     required this.role,
     required this.profilePictureUrl,
+    required this.createdAt,
   });
 
   final String name;
@@ -143,6 +147,7 @@ class DashboardUser {
   final String city;
   final String role;
   final String? profilePictureUrl;
+  final DateTime? createdAt;
 
   factory DashboardUser.fromJson(Map<String, dynamic> json) {
     return DashboardUser(
@@ -151,6 +156,7 @@ class DashboardUser {
       city: (json['city'] ?? '') as String,
       role: (json['role'] ?? '') as String,
       profilePictureUrl: json['profile_picture_url'] as String?,
+      createdAt: DateTime.tryParse((json['created_at'] ?? '').toString()),
     );
   }
 }
@@ -249,9 +255,9 @@ class PerformanceMetrics {
     return PerformanceMetrics(
       baselineEmission: (json['baseline_emission'] as num?)?.toDouble() ?? 0,
       baselineStatus: (json['baseline_status'] ?? '') as String,
-      currentAvgEmission: (json['current_avg_emission'] as num?)?.toDouble() ?? 0,
+      currentAvgEmission:
+          (json['current_avg_emission'] as num?)?.toDouble() ?? 0,
       reductionPercent: (json['reduction_percent'] as num?)?.toDouble() ?? 0,
     );
   }
 }
-

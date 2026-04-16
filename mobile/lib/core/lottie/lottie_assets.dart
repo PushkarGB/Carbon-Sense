@@ -11,5 +11,16 @@ class LottieAssets {
   static const onboardingWaste = 'assets/lottie/onboarding_waste.json';
 
   static const inputHeader = 'assets/lottie/inputHeader.json';
+  static const earthRotatePlaceholder =
+      'assets/lottie/earth_rotate_placeholder.json';
+  static const cinematicIntroPlaceholder =
+      'assets/lottie/cinematic_intro_placeholder.json';
+  static const dashboardHeaderPlaceholder =
+      'assets/lottie/dashboard_header_placeholder.json';
+  static const insightsHeaderPlaceholder =
+      'assets/lottie/insights_header_placeholder.json';
+  static const leaderboardHeaderPlaceholder =
+      'assets/lottie/leaderboard_header_placeholder.json';
+  static const profileHeaderPlaceholder =
+      'assets/lottie/profile_header_placeholder.json';
 }
-

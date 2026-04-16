@@ -19,11 +19,22 @@ class DashboardTab extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final state = ref.watch(dashboardHomeProvider);
+    final width = MediaQuery.sizeOf(context).width;
+    final heroHeight = (width * 0.34).clamp(110.0, 170.0);
 
     return SafeArea(
       child: ListView(
         padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
         children: [
+          SizedBox(
+            height: heroHeight,
+            child: LottieBuilder.asset(
+              LottieAssets.dashboardHeaderPlaceholder,
+              repeat: true,
+              fit: BoxFit.contain,
+            ),
+          ),
+          const SizedBox(height: 8),
           state.when(
             data: (home) => _StreakPopupGate(child: _DashboardBody(home: home)),
             loading: () => _DashboardLoading(),
@@ -143,8 +154,8 @@ class _DashboardError extends StatelessWidget {
                   Text(
                     'Couldn’t load dashboard',
                     style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.w700,
-                        ),
+                      fontWeight: FontWeight.w700,
+                    ),
                   ),
                   const SizedBox(height: 4),
                   Text(
@@ -212,15 +223,15 @@ class _Header extends StatelessWidget {
               Text(
                 'Hi, ${user.name}',
                 style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                      fontWeight: FontWeight.w800,
-                    ),
+                  fontWeight: FontWeight.w800,
+                ),
               ),
               const SizedBox(height: 4),
               Text(
                 '${user.city} • ${user.role}',
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: cs.onSurfaceVariant,
-                    ),
+                style: Theme.of(
+                  context,
+                ).textTheme.bodyMedium?.copyWith(color: cs.onSurfaceVariant),
               ),
             ],
           ),
@@ -263,11 +274,11 @@ class _Avatar extends StatelessWidget {
     final initials = name.trim().isEmpty
         ? '?'
         : name
-            .trim()
-            .split(RegExp(r'\s+'))
-            .take(2)
-            .map((p) => p.isNotEmpty ? p[0].toUpperCase() : '')
-            .join();
+              .trim()
+              .split(RegExp(r'\s+'))
+              .take(2)
+              .map((p) => p.isNotEmpty ? p[0].toUpperCase() : '')
+              .join();
 
     return ClipRRect(
       borderRadius: BorderRadius.circular(999),
@@ -321,8 +332,8 @@ class _TodayEmissionCard extends StatelessWidget {
                   child: Text(
                     "Today's emission",
                     style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.w800,
-                        ),
+                      fontWeight: FontWeight.w800,
+                    ),
                   ),
                 ),
                 Text(
@@ -360,9 +371,15 @@ class _TodayEmissionCard extends StatelessWidget {
                 height: 160,
                 child: Row(
                   children: [
-                    Expanded(child: _Donut(breakdown: todayEmission!.breakdown)),
+                    Expanded(
+                      child: _Donut(breakdown: todayEmission!.breakdown),
+                    ),
                     const SizedBox(width: 12),
-                    Expanded(child: _BreakdownLegend(breakdown: todayEmission!.breakdown)),
+                    Expanded(
+                      child: _BreakdownLegend(
+                        breakdown: todayEmission!.breakdown,
+                      ),
+                    ),
                   ],
                 ),
               ),
@@ -443,16 +460,16 @@ class _BreakdownLegend extends StatelessWidget {
                   child: Text(
                     _prettyKey(e.key),
                     style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          fontWeight: FontWeight.w600,
-                        ),
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
                 ),
                 Text(
                   e.value.toStringAsFixed(1),
                   style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: Theme.of(context).colorScheme.onSurfaceVariant,
-                        fontWeight: FontWeight.w700,
-                      ),
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    fontWeight: FontWeight.w700,
+                  ),
                 ),
               ],
             ),
@@ -488,9 +505,9 @@ class _AqiCard extends StatelessWidget {
           children: [
             Text(
               'Air quality (AQI)',
-              style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.w800,
-                  ),
+              style: Theme.of(
+                context,
+              ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
             ),
             const SizedBox(height: 10),
             if (aqi == null)
@@ -596,8 +613,8 @@ class _TasksProgressCard extends StatelessWidget {
                     child: Text(
                       'Today’s tasks',
                       style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                            fontWeight: FontWeight.w800,
-                          ),
+                        fontWeight: FontWeight.w800,
+                      ),
                     ),
                   ),
                   Icon(Icons.chevron_right, color: cs.onSurfaceVariant),
@@ -622,7 +639,9 @@ class _TasksProgressCard extends StatelessWidget {
                   borderRadius: BorderRadius.circular(999),
                   child: LinearProgressIndicator(
                     minHeight: 10,
-                    value: progress!.total == 0 ? 0 : progress!.completed / progress!.total,
+                    value: progress!.total == 0
+                        ? 0
+                        : progress!.completed / progress!.total,
                     backgroundColor: cs.surfaceContainerHighest,
                   ),
                 ),
@@ -654,9 +673,9 @@ class _PerformanceCard extends StatelessWidget {
           children: [
             Text(
               'Performance',
-              style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.w800,
-                  ),
+              style: Theme.of(
+                context,
+              ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
             ),
             const SizedBox(height: 10),
             Row(
@@ -736,9 +755,9 @@ class _PerformanceCard extends StatelessWidget {
           const SizedBox(height: 2),
           Text(
             '$value $suffix',
-            style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                  fontWeight: FontWeight.w900,
-                ),
+            style: Theme.of(
+              context,
+            ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w900),
           ),
         ],
       ),
@@ -764,9 +783,9 @@ class _ProjectionCard extends StatelessWidget {
           children: [
             Text(
               '30-day projection',
-              style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.w800,
-                  ),
+              style: Theme.of(
+                context,
+              ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
             ),
             const SizedBox(height: 12),
             SizedBox(
@@ -829,4 +848,3 @@ class _OnboardingBanner extends StatelessWidget {
     );
   }
 }
-

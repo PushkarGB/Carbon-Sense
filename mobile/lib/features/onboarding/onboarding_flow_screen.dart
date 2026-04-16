@@ -63,8 +63,14 @@ class _OnboardingFlowScreenState extends ConsumerState<OnboardingFlowScreen> {
     try {
       await ref.read(onboardingRepositoryProvider).complete(defaults);
       final prefs = LifestylePrefs();
-      await prefs.writeElectricityUnitsPerMonth(monthlyKwh, updatedYyyyMm: yyyyMm);
-      await prefs.writeWasteBagsPerMonth(monthlyWasteBags, updatedYyyyMm: yyyyMm);
+      await prefs.writeElectricityUnitsPerMonth(
+        monthlyKwh,
+        updatedYyyyMm: yyyyMm,
+      );
+      await prefs.writeWasteBagsPerMonth(
+        monthlyWasteBags,
+        updatedYyyyMm: yyyyMm,
+      );
       if (!mounted) return;
       context.go('/shell/dashboard');
     } catch (e) {
@@ -94,9 +100,7 @@ class _OnboardingFlowScreenState extends ConsumerState<OnboardingFlowScreen> {
     };
 
     return Scaffold(
-      appBar: AppBar(
-        title: Text('Onboarding (${_step + 1}/4)'),
-      ),
+      appBar: AppBar(title: Text('Onboarding (${_step + 1}/4)')),
       body: SafeArea(
         child: Padding(
           padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
@@ -114,20 +118,20 @@ class _OnboardingFlowScreenState extends ConsumerState<OnboardingFlowScreen> {
               Text(
                 header.$2,
                 style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                      fontWeight: FontWeight.w700,
-                    ),
+                  fontWeight: FontWeight.w700,
+                ),
               ),
               const SizedBox(height: 12),
-              Expanded(
-                child: questions,
-              ),
+              Expanded(child: questions),
               if (_errorText != null) ...[
                 const SizedBox(height: 10),
                 Align(
                   alignment: Alignment.centerLeft,
                   child: Text(
                     _errorText!,
-                    style: TextStyle(color: Theme.of(context).colorScheme.error),
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.error,
+                    ),
                   ),
                 ),
               ],
@@ -136,10 +140,9 @@ class _OnboardingFlowScreenState extends ConsumerState<OnboardingFlowScreen> {
                 children: [
                   Expanded(
                     child: OutlinedButton(
-                      onPressed:
-                          _submitting || _step == 0
-                              ? null
-                              : () => setState(() => _step -= 1),
+                      onPressed: _submitting || _step == 0
+                          ? null
+                          : () => setState(() => _step -= 1),
                       child: const Text('Back'),
                     ),
                   ),
@@ -156,7 +159,9 @@ class _OnboardingFlowScreenState extends ConsumerState<OnboardingFlowScreen> {
                               await _finish();
                             },
                       child: Text(
-                        _step < 3 ? 'Next' : (_submitting ? 'Saving…' : 'Finish'),
+                        _step < 3
+                            ? 'Next'
+                            : (_submitting ? 'Saving…' : 'Finish'),
                       ),
                     ),
                   ),
@@ -174,17 +179,25 @@ class _OnboardingFlowScreenState extends ConsumerState<OnboardingFlowScreen> {
       children: [
         _questionTitle(context, 'Most days, what carries you?'),
         const SizedBox(height: 10),
-        SegmentedButton<String>(
-          segments: const [
-            ButtonSegment(value: 'car', label: Text('🚗 Car')),
-            ButtonSegment(value: 'bike', label: Text('🏍️ Bike')),
-            ButtonSegment(value: 'bus', label: Text('🚌 Bus')),
-            ButtonSegment(value: 'metro', label: Text('🚇 Metro')),
-            ButtonSegment(value: 'walk', label: Text('🚶 Walk')),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            for (final item in const [
+              ('car', '🚗 Car'),
+              ('bike', '🏍️ Bike'),
+              ('bus', '🚌 Bus'),
+              ('metro', '🚇 Metro'),
+              ('walk', '🚶 Walk'),
+            ])
+              ChoiceChip(
+                label: Text(item.$2),
+                selected: _transportMode == item.$1,
+                onSelected: _submitting
+                    ? null
+                    : (_) => setState(() => _transportMode = item.$1),
+              ),
           ],
-          selected: {_transportMode},
-          onSelectionChanged:
-              _submitting ? null : (s) => setState(() => _transportMode = s.first),
         ),
         const SizedBox(height: 18),
         _questionTitle(context, 'How far does a typical day stretch? (km)'),
@@ -196,7 +209,9 @@ class _OnboardingFlowScreenState extends ConsumerState<OnboardingFlowScreen> {
           max: 100,
           divisions: 100,
           label: '${_avgDailyDistance.round()}',
-          onChanged: _submitting ? null : (v) => setState(() => _avgDailyDistance = v),
+          onChanged: _submitting
+              ? null
+              : (v) => setState(() => _avgDailyDistance = v),
         ),
       ],
     );
@@ -207,23 +222,31 @@ class _OnboardingFlowScreenState extends ConsumerState<OnboardingFlowScreen> {
       children: [
         _questionTitle(context, 'What does your meter whisper in a month?'),
         const SizedBox(height: 8),
-        _sliderLabel(context, '${_electricityUnitsPerMonth.round()} units / month'),
+        _sliderLabel(
+          context,
+          '${_electricityUnitsPerMonth.round()} units / month',
+        ),
         Slider(
           value: _electricityUnitsPerMonth,
           min: 0,
           max: 1200,
           divisions: 120,
           label: '${_electricityUnitsPerMonth.round()}',
-          onChanged: _submitting ? null : (v) => setState(() => _electricityUnitsPerMonth = v),
+          onChanged: _submitting
+              ? null
+              : (v) => setState(() => _electricityUnitsPerMonth = v),
         ),
         Text(
           'Tip: “unit” = kWh (from your electricity bill). We’ll spread it across days.',
           style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                color: Theme.of(context).colorScheme.onSurfaceVariant,
-              ),
+            color: Theme.of(context).colorScheme.onSurfaceVariant,
+          ),
         ),
         const SizedBox(height: 18),
-        _questionTitle(context, 'On a typical day, how long does the cool breeze run? (hours/day)'),
+        _questionTitle(
+          context,
+          'On a typical day, how long does the cool breeze run? (hours/day)',
+        ),
         const SizedBox(height: 8),
         _sliderLabel(context, '${_acHours.round()} hours'),
         Slider(
@@ -250,8 +273,9 @@ class _OnboardingFlowScreenState extends ConsumerState<OnboardingFlowScreen> {
             ButtonSegment(value: 'mixed', label: Text('🥘 Mixed')),
           ],
           selected: {_dietType},
-          onSelectionChanged:
-              _submitting ? null : (s) => setState(() => _dietType = s.first),
+          onSelectionChanged: _submitting
+              ? null
+              : (s) => setState(() => _dietType = s.first),
         ),
         const SizedBox(height: 18),
         _questionTitle(context, 'How many meals does a typical day hold?'),
@@ -262,7 +286,9 @@ class _OnboardingFlowScreenState extends ConsumerState<OnboardingFlowScreen> {
           min: 1,
           max: 6,
           unit: 'meals',
-          onChanged: _submitting ? null : (v) => setState(() => _mealsPerDay = v),
+          onChanged: _submitting
+              ? null
+              : (v) => setState(() => _mealsPerDay = v),
         ),
       ],
     );
@@ -279,14 +305,16 @@ class _OnboardingFlowScreenState extends ConsumerState<OnboardingFlowScreen> {
           min: 0,
           max: 300,
           unit: 'bags / month',
-          onChanged: _submitting ? null : (v) => setState(() => _wasteBagsPerMonth = v),
+          onChanged: _submitting
+              ? null
+              : (v) => setState(() => _wasteBagsPerMonth = v),
         ),
         const SizedBox(height: 8),
         Text(
           'Rough estimate is fine. We’ll turn this into a daily average internally.',
           style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                color: Theme.of(context).colorScheme.onSurfaceVariant,
-              ),
+            color: Theme.of(context).colorScheme.onSurfaceVariant,
+          ),
         ),
       ],
     );
@@ -295,9 +323,9 @@ class _OnboardingFlowScreenState extends ConsumerState<OnboardingFlowScreen> {
   Widget _questionTitle(BuildContext context, String text) {
     return Text(
       text,
-      style: Theme.of(context).textTheme.titleMedium?.copyWith(
-            fontWeight: FontWeight.w700,
-          ),
+      style: Theme.of(
+        context,
+      ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
     );
   }
 
@@ -307,8 +335,8 @@ class _OnboardingFlowScreenState extends ConsumerState<OnboardingFlowScreen> {
       child: Text(
         text,
         style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-              color: Theme.of(context).colorScheme.onSurfaceVariant,
-            ),
+          color: Theme.of(context).colorScheme.onSurfaceVariant,
+        ),
       ),
     );
   }
@@ -333,9 +361,9 @@ class _OnboardingFlowScreenState extends ConsumerState<OnboardingFlowScreen> {
           child: Center(
             child: Text(
               '$value $unit',
-              style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                    fontWeight: FontWeight.w700,
-                  ),
+              style: Theme.of(
+                context,
+              ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
             ),
           ),
         ),
@@ -349,4 +377,3 @@ class _OnboardingFlowScreenState extends ConsumerState<OnboardingFlowScreen> {
     );
   }
 }
-

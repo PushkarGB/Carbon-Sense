@@ -21,7 +21,8 @@ class ActivityWizardScreen extends ConsumerStatefulWidget {
   final ActivityType type;
 
   @override
-  ConsumerState<ActivityWizardScreen> createState() => _ActivityWizardScreenState();
+  ConsumerState<ActivityWizardScreen> createState() =>
+      _ActivityWizardScreenState();
 }
 
 class _ActivityWizardScreenState extends ConsumerState<ActivityWizardScreen> {
@@ -32,7 +33,8 @@ class _ActivityWizardScreenState extends ConsumerState<ActivityWizardScreen> {
   // Defaults (will be overwritten if onboarding_defaults exists)
   String _transportMode = 'car';
   double _transportDistance = 10;
-  int _electricityProxy = 1; // 0 low | 1 normal | 2 high (relative to monthly baseline)
+  int _electricityProxy =
+      1; // 0 low | 1 normal | 2 high (relative to monthly baseline)
   double _acHours = 2;
   String _dietType = 'veg';
   int _mealsCount = 3;
@@ -102,7 +104,9 @@ class _ActivityWizardScreenState extends ConsumerState<ActivityWizardScreen> {
       });
     }
 
-    final title = widget.type == ActivityType.daily ? 'Daily Log' : 'Weekly Log';
+    final title = widget.type == ActivityType.daily
+        ? 'Daily Log'
+        : 'Weekly Log';
     final subtitle = widget.type == ActivityType.daily
         ? 'Tell us about today.'
         : 'Looking back at your week…';
@@ -113,18 +117,20 @@ class _ActivityWizardScreenState extends ConsumerState<ActivityWizardScreen> {
     );
 
     final headerLottie = LottieAssets.inputHeader;
+    final headerHeight = (MediaQuery.sizeOf(context).height * 0.17).clamp(
+      110.0,
+      170.0,
+    );
 
     return Scaffold(
-      appBar: AppBar(
-        title: Text('$title (${_page + 1}/5)'),
-      ),
+      appBar: AppBar(title: Text('$title (${_page + 1}/5)')),
       body: SafeArea(
         child: Padding(
           padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
           child: Column(
             children: [
               SizedBox(
-                height: 140,
+                height: headerHeight,
                 child: LottieBuilder.asset(
                   headerLottie,
                   repeat: true,
@@ -135,20 +141,20 @@ class _ActivityWizardScreenState extends ConsumerState<ActivityWizardScreen> {
               Text(
                 subtitle,
                 style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: Theme.of(context).colorScheme.onSurfaceVariant,
-                    ),
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
               ),
               const SizedBox(height: 12),
-              Expanded(
-                child: _pageBody(context, ecoActionOptions),
-              ),
+              Expanded(child: _pageBody(context, ecoActionOptions)),
               if (_errorText != null) ...[
                 const SizedBox(height: 10),
                 Align(
                   alignment: Alignment.centerLeft,
                   child: Text(
                     _errorText!,
-                    style: TextStyle(color: Theme.of(context).colorScheme.error),
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.error,
+                    ),
                   ),
                 ),
               ],
@@ -176,7 +182,9 @@ class _ActivityWizardScreenState extends ConsumerState<ActivityWizardScreen> {
                               await _submit();
                             },
                       child: Text(
-                        _page < 4 ? 'Next' : (_submitting ? 'Submitting…' : 'Submit'),
+                        _page < 4
+                            ? 'Next'
+                            : (_submitting ? 'Submitting…' : 'Submit'),
                       ),
                     ),
                   ),
@@ -203,22 +211,40 @@ class _ActivityWizardScreenState extends ConsumerState<ActivityWizardScreen> {
   Widget _movePage(BuildContext context) {
     return ListView(
       children: [
-        _q(context, 'Which wheels carried you today?'),
+        _q(
+          context,
+          widget.type == ActivityType.daily
+              ? 'How did you travel today?'
+              : 'How did you mostly travel this week?',
+        ),
         const SizedBox(height: 10),
-        SegmentedButton<String>(
-          segments: const [
-            ButtonSegment(value: 'car', label: Text('🚗 Car')),
-            ButtonSegment(value: 'bike', label: Text('🏍️ Bike')),
-            ButtonSegment(value: 'bus', label: Text('🚌 Bus')),
-            ButtonSegment(value: 'metro', label: Text('🚇 Metro')),
-            ButtonSegment(value: 'walk', label: Text('🚶 Walk')),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            for (final item in const [
+              ('car', '🚗 Car'),
+              ('bike', '🏍️ Bike'),
+              ('bus', '🚌 Bus'),
+              ('metro', '🚇 Metro'),
+              ('walk', '🚶 Walk'),
+            ])
+              ChoiceChip(
+                label: Text(item.$2),
+                selected: _transportMode == item.$1,
+                onSelected: _submitting
+                    ? null
+                    : (_) => setState(() => _transportMode = item.$1),
+              ),
           ],
-          selected: {_transportMode},
-          onSelectionChanged:
-              _submitting ? null : (s) => setState(() => _transportMode = s.first),
         ),
         const SizedBox(height: 18),
-        _q(context, 'How far did your day stretch? (km)'),
+        _q(
+          context,
+          widget.type == ActivityType.daily
+              ? 'How far did your day stretch? (km)'
+              : 'Was your travel distance higher or lower than usual? (km)',
+        ),
         const SizedBox(height: 8),
         _label(context, '${_transportDistance.round()} km'),
         Slider(
@@ -227,7 +253,9 @@ class _ActivityWizardScreenState extends ConsumerState<ActivityWizardScreen> {
           max: 200,
           divisions: 200,
           label: '${_transportDistance.round()}',
-          onChanged: _submitting ? null : (v) => setState(() => _transportDistance = v),
+          onChanged: _submitting
+              ? null
+              : (v) => setState(() => _transportDistance = v),
         ),
       ],
     );
@@ -251,15 +279,16 @@ class _ActivityWizardScreenState extends ConsumerState<ActivityWizardScreen> {
             ButtonSegment(value: 2, label: Text('Loud')),
           ],
           selected: {_electricityProxy},
-          onSelectionChanged:
-              _submitting ? null : (s) => setState(() => _electricityProxy = s.first),
+          onSelectionChanged: _submitting
+              ? null
+              : (s) => setState(() => _electricityProxy = s.first),
         ),
         const SizedBox(height: 10),
         Text(
           'We’ll compare this against your monthly baseline (from onboarding).',
           style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                color: Theme.of(context).colorScheme.onSurfaceVariant,
-              ),
+            color: Theme.of(context).colorScheme.onSurfaceVariant,
+          ),
         ),
         const SizedBox(height: 18),
         _q(
@@ -285,7 +314,12 @@ class _ActivityWizardScreenState extends ConsumerState<ActivityWizardScreen> {
   Widget _platePage(BuildContext context) {
     return ListView(
       children: [
-        _q(context, 'What was the mood on your plate today?'),
+        _q(
+          context,
+          widget.type == ActivityType.daily
+              ? 'What was the mood on your plate today?'
+              : 'How often did you eat non-veg this week?',
+        ),
         const SizedBox(height: 10),
         SegmentedButton<String>(
           segments: const [
@@ -294,11 +328,17 @@ class _ActivityWizardScreenState extends ConsumerState<ActivityWizardScreen> {
             ButtonSegment(value: 'mixed', label: Text('🥘 Mixed')),
           ],
           selected: {_dietType},
-          onSelectionChanged:
-              _submitting ? null : (s) => setState(() => _dietType = s.first),
+          onSelectionChanged: _submitting
+              ? null
+              : (s) => setState(() => _dietType = s.first),
         ),
         const SizedBox(height: 18),
-        _q(context, 'How many meals did today hold?'),
+        _q(
+          context,
+          widget.type == ActivityType.daily
+              ? 'How many meals did today hold?'
+              : 'Did your meal pattern change this week?',
+        ),
         const SizedBox(height: 8),
         _stepper(
           context,
@@ -306,7 +346,9 @@ class _ActivityWizardScreenState extends ConsumerState<ActivityWizardScreen> {
           min: 1,
           max: 6,
           unit: 'meals',
-          onChanged: _submitting ? null : (v) => setState(() => _mealsCount = v),
+          onChanged: _submitting
+              ? null
+              : (v) => setState(() => _mealsCount = v),
         ),
       ],
     );
@@ -325,15 +367,17 @@ class _ActivityWizardScreenState extends ConsumerState<ActivityWizardScreen> {
         SwitchListTile.adaptive(
           contentPadding: EdgeInsets.zero,
           value: _wasteSegregation,
-          onChanged: _submitting ? null : (v) => setState(() => _wasteSegregation = v),
+          onChanged: _submitting
+              ? null
+              : (v) => setState(() => _wasteSegregation = v),
           title: Text(_wasteSegregation ? 'Yes' : 'No'),
         ),
         const SizedBox(height: 10),
         Text(
           'Waste quantity comes from your monthly baseline (you can update it at month-end).',
           style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                color: Theme.of(context).colorScheme.onSurfaceVariant,
-              ),
+            color: Theme.of(context).colorScheme.onSurfaceVariant,
+          ),
         ),
       ],
     );
@@ -344,7 +388,12 @@ class _ActivityWizardScreenState extends ConsumerState<ActivityWizardScreen> {
 
     return ListView(
       children: [
-        _q(context, 'Which green moves happened today?'),
+        _q(
+          context,
+          widget.type == ActivityType.daily
+              ? 'Which green moves happened today?'
+              : 'Did you make any conscious eco improvements this week?',
+        ),
         const SizedBox(height: 10),
         if (options.isEmpty)
           Card(
@@ -378,27 +427,30 @@ class _ActivityWizardScreenState extends ConsumerState<ActivityWizardScreen> {
             runSpacing: 10,
             children: [
               for (final t in options)
-                FilterChip(
-                  label: Text(t.title),
-                  selected: _ecoActions.contains(t.taskId),
-                  onSelected: _submitting
-                      ? null
-                      : (on) => setState(() {
+                GestureDetector(
+                  onLongPress: () => _showTaskDescription(t),
+                  child: FilterChip(
+                    label: Text(t.title),
+                    selected: _ecoActions.contains(t.taskId),
+                    onSelected: _submitting
+                        ? null
+                        : (on) => setState(() {
                             if (on) {
                               _ecoActions.add(t.taskId);
                             } else {
                               _ecoActions.remove(t.taskId);
                             }
                           }),
+                  ),
                 ),
             ],
           ),
         const SizedBox(height: 18),
         Text(
           'We use this to personalize tasks.',
-          style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                color: cs.onSurfaceVariant,
-              ),
+          style: Theme.of(
+            context,
+          ).textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant),
         ),
       ],
     );
@@ -407,9 +459,9 @@ class _ActivityWizardScreenState extends ConsumerState<ActivityWizardScreen> {
   Text _q(BuildContext context, String text) {
     return Text(
       text,
-      style: Theme.of(context).textTheme.titleMedium?.copyWith(
-            fontWeight: FontWeight.w800,
-          ),
+      style: Theme.of(
+        context,
+      ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
     );
   }
 
@@ -419,9 +471,9 @@ class _ActivityWizardScreenState extends ConsumerState<ActivityWizardScreen> {
       child: Text(
         text,
         style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-              color: Theme.of(context).colorScheme.onSurfaceVariant,
-              fontWeight: FontWeight.w700,
-            ),
+          color: Theme.of(context).colorScheme.onSurfaceVariant,
+          fontWeight: FontWeight.w700,
+        ),
       ),
     );
   }
@@ -446,9 +498,9 @@ class _ActivityWizardScreenState extends ConsumerState<ActivityWizardScreen> {
           child: Center(
             child: Text(
               '$value $unit',
-              style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                    fontWeight: FontWeight.w900,
-                  ),
+              style: Theme.of(
+                context,
+              ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w900),
             ),
           ),
         ),
@@ -469,14 +521,22 @@ class _ActivityWizardScreenState extends ConsumerState<ActivityWizardScreen> {
     });
 
     final prefs = LifestylePrefs();
-    final yyyyMm = todayIstYyyyMm();
     final monthlyUnits = await prefs.readElectricityUnitsPerMonth();
     final monthlyWasteBags = await prefs.readWasteBagsPerMonth();
 
     // Derived daily values used internally (never explicitly asked in daily log).
-    final baseUnitsPerDay = monthlyUnits == null ? 6 : (monthlyUnits / 30).round().clamp(0, 60);
-    final proxyMultiplier = switch (_electricityProxy) { 0 => 0.7, 1 => 1.0, _ => 1.3 };
-    final electricityUnits = (baseUnitsPerDay * proxyMultiplier).round().clamp(0, 80);
+    final baseUnitsPerDay = monthlyUnits == null
+        ? 6
+        : (monthlyUnits / 30).round().clamp(0, 60);
+    final proxyMultiplier = switch (_electricityProxy) {
+      0 => 0.7,
+      1 => 1.0,
+      _ => 1.3,
+    };
+    final electricityUnits = (baseUnitsPerDay * proxyMultiplier).round().clamp(
+      0,
+      80,
+    );
 
     final baseWasteBagsPerDay = monthlyWasteBags == null
         ? 1
@@ -533,7 +593,9 @@ class _ActivityWizardScreenState extends ConsumerState<ActivityWizardScreen> {
                 ),
               ),
               if (result.totalEmission != null)
-                Text('${result.totalEmission!.toStringAsFixed(1)} kg CO₂ logged'),
+                Text(
+                  '${result.totalEmission!.toStringAsFixed(1)} kg CO₂ logged',
+                ),
             ],
           ),
           actions: [
@@ -554,5 +616,23 @@ class _ActivityWizardScreenState extends ConsumerState<ActivityWizardScreen> {
       if (mounted) setState(() => _submitting = false);
     }
   }
-}
 
+  Future<void> _showTaskDescription(TaskItem task) async {
+    final description = task.description.trim().isEmpty
+        ? 'Description not available for this eco task yet.'
+        : task.description;
+    await showDialog<void>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: Text(task.title),
+        content: Text(description),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
+  }
+}

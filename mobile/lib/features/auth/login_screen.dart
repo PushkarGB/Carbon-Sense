@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:lottie/lottie.dart';
 
 import '../../core/auth/auth_repository.dart';
+import '../../core/bootstrap/bootstrap_controller.dart';
 import '../../core/lottie/lottie_assets.dart';
 import '../../core/preferences/lifestyle_prefs.dart';
 
@@ -40,6 +41,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       // Clear any stale per-user prefs from a previous session.
       await LifestylePrefs().clearUserSession();
       if (!mounted) return;
+      // Force bootstrap to re-run so /app/open fires and streak popup
+      // data is written to SharedPreferences for this session.
+      ref.invalidate(bootstrapProvider);
       context.go('/splash');
     } catch (e) {
       setState(() => _errorText = 'Login failed. Please try again.');

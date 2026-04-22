@@ -8,6 +8,7 @@ import 'package:lottie/lottie.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../../core/auth/auth_repository.dart';
+import '../../core/bootstrap/bootstrap_controller.dart';
 import '../../core/cloudinary/cloudinary_uploader.dart';
 import '../../core/lottie/lottie_assets.dart';
 import '../../core/preferences/lifestyle_prefs.dart';
@@ -75,7 +76,10 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
       // Clear any stale per-user prefs — new account must start clean.
       await LifestylePrefs().clearUserSession();
       if (!mounted) return;
-      context.go('/onboarding');
+      // Force bootstrap to re-run so /app/open fires and streak popup
+      // data is written to SharedPreferences for this new user.
+      ref.invalidate(bootstrapProvider);
+      context.go('/splash');
     } catch (e) {
       showDialog(
         context: context,

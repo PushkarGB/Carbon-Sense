@@ -5,8 +5,11 @@ import 'package:lottie/lottie.dart';
 
 import '../../core/api/api_error.dart';
 import '../../core/lottie/lottie_assets.dart';
+import '../../core/widgets/celebration_dialog.dart';
 import '../../core/preferences/lifestyle_prefs.dart';
 import '../dashboard/dashboard_controller.dart';
+import '../insights/insights_controller.dart';
+import '../profile/profile_controller.dart';
 import '../tasks/tasks_controller.dart';
 import '../tasks/tasks_models.dart';
 import 'activity_models.dart';
@@ -571,40 +574,28 @@ class _ActivityWizardScreenState extends ConsumerState<ActivityWizardScreen> {
         await prefs.writeLastWeeklyLogYmd(today);
       }
 
-      // Refresh dashboard + tasks after submission.
+      // Refresh dashboard + tasks + profile after submission.
       ref.invalidate(dashboardHomeProvider);
+      ref.invalidate(insightsSummaryProvider);
       ref.invalidate(todayTasksProvider);
+      ref.invalidate(profileProvider);
 
-      await showDialog<void>(
-        context: context,
-        barrierDismissible: true,
-        builder: (_) => AlertDialog(
-          title: const Text('Success'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              SizedBox(
-                height: 120,
-                width: 120,
-                child: LottieBuilder.asset(
-                  LottieAssets.success,
-                  repeat: false,
-                  fit: BoxFit.contain,
-                ),
-              ),
-              if (result.totalEmission != null)
-                Text(
-                  '${result.totalEmission!.toStringAsFixed(1)} kg CO₂ logged',
-                ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: const Text('Done'),
-            ),
-          ],
-        ),
+      // Badge engine evaluation is async/event-driven on the backend.
+      // Re-fetch profile after a short delay so any newly awarded badges
+      // are caught by the shell_screen badge dialog listener.
+      Future.delayed(const Duration(seconds: 3), () {
+        if (mounted) ref.invalidate(profileProvider);
+      });
+
+      await showCelebrationDialog(
+        context,
+        title: widget.type == ActivityType.daily
+            ? 'Day Logged!'
+            : 'Week Logged!',
+        subtitle: result.totalEmission != null
+            ? '${result.totalEmission!.toStringAsFixed(1)} kg CO\u2082 recorded today'
+            : 'Your footprint data has been saved.',
+        actionLabel: 'Continue',
       );
 
       if (!mounted) return;

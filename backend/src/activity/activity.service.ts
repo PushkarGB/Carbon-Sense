@@ -40,6 +40,7 @@ type TaskStats = UserProfile['task_stats'];
 type BehaviorProfile = UserProfile['behavior_profile'];
 type PerformanceMetrics = UserProfile['performance_metrics'];
 type WeeklyInsights = UserProfile['weekly_insights'];
+type EngagementMetrics = UserProfile['engagement_metrics'];
 const UNSET_PROFILE_DATE = '1970-01-01';
 
 @Injectable()
@@ -293,6 +294,7 @@ export class ActivityService {
           submissionType === 'daily' ? getYesterdayEmission(carbonRecords) : 0,
           nextBehaviorProfile,
           lockedUserProfile!.task_stats,
+          lockedUserProfile!.engagement_metrics,
           session,
         );
       } catch (error) {
@@ -357,6 +359,7 @@ export class ActivityService {
     yesterdayEmission: number,
     behaviorProfile: BehaviorProfile,
     existingTaskStats: TaskStats,
+    existingEngagementMetrics: EngagementMetrics,
     session: ClientSession,
   ): Promise<string[]> {
     const userDailyTask = await this.userDailyTaskModel
@@ -410,6 +413,9 @@ export class ActivityService {
 
     const completedTaskIds: string[] = [];
     const nextTaskStats: TaskStats = { ...existingTaskStats };
+    const nextEngagementMetrics: EngagementMetrics = {
+      ...existingEngagementMetrics,
+    };
     let tasksChanged = false;
 
     for (const task of userDailyTask.tasks) {
@@ -448,6 +454,7 @@ export class ActivityService {
         const category = task.category as keyof TaskStats;
         nextTaskStats[category] += 1;
       }
+      nextEngagementMetrics.total_tasks_completed += 1;
     }
 
     if (tasksChanged) {
@@ -463,7 +470,10 @@ export class ActivityService {
       { user_id: userId },
       {
         $set: {
-          'engagement_metrics.task_completion_rate': taskCompletionRate,
+          engagement_metrics: {
+            ...nextEngagementMetrics,
+            task_completion_rate: taskCompletionRate,
+          },
           task_stats: nextTaskStats,
           updated_at: new Date(),
         },

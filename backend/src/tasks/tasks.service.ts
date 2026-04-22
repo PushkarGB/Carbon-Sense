@@ -48,6 +48,7 @@ import { ErrorLogService } from '../resilience/error-log.service';
 
 type TaskStats = UserProfile['task_stats'];
 type WeeklyInsights = UserProfile['weekly_insights'];
+type EngagementMetrics = UserProfile['engagement_metrics'];
 
 @Injectable()
 export class TasksService {
@@ -234,10 +235,14 @@ export class TasksService {
       await userDailyTask.save({ session });
 
       const nextTaskStats: TaskStats = { ...userProfile.task_stats };
+      const nextEngagementMetrics: EngagementMetrics = {
+        ...userProfile.engagement_metrics,
+      };
       if (task.category in nextTaskStats) {
         const category = task.category as keyof TaskStats;
         nextTaskStats[category] += 1;
       }
+      nextEngagementMetrics.total_tasks_completed += 1;
 
       const taskCompletionRate = await this.calculateTaskCompletionRate(
         userId,
@@ -248,7 +253,10 @@ export class TasksService {
         { _id: userProfile._id },
         {
           $set: {
-            'engagement_metrics.task_completion_rate': taskCompletionRate,
+            engagement_metrics: {
+              ...nextEngagementMetrics,
+              task_completion_rate: taskCompletionRate,
+            },
             task_stats: nextTaskStats,
             updated_at: now,
           },
@@ -339,6 +347,9 @@ export class TasksService {
       );
 
       const nextTaskStats: TaskStats = { ...userProfile.task_stats };
+      const nextEngagementMetrics: EngagementMetrics = {
+        ...userProfile.engagement_metrics,
+      };
       let tasksChanged = false;
 
       for (const task of userDailyTask.tasks) {
@@ -369,6 +380,7 @@ export class TasksService {
           const category = task.category as keyof TaskStats;
           nextTaskStats[category] += 1;
         }
+        nextEngagementMetrics.total_tasks_completed += 1;
       }
 
       if (tasksChanged) {
@@ -384,7 +396,10 @@ export class TasksService {
         { _id: userProfile._id },
         {
           $set: {
-            'engagement_metrics.task_completion_rate': taskCompletionRate,
+            engagement_metrics: {
+              ...nextEngagementMetrics,
+              task_completion_rate: taskCompletionRate,
+            },
             task_stats: nextTaskStats,
             updated_at: now,
           },

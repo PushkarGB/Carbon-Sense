@@ -187,6 +187,7 @@ function createUserProfile() {
     engagement_metrics: {
       app_open_count: 0,
       task_completion_rate: 0,
+      total_tasks_completed: 0,
       total_days_logged: 1,
     },
     weekly_insights: {

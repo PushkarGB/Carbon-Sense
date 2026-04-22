@@ -19,7 +19,7 @@ export interface CarbonRecord {
   breakdown: {
     transport: number;
     electricity: number;
-    food: number;
+    food: number
     waste: number;
   };
   created_at: Date;

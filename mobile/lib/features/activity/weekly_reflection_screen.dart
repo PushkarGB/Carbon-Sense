@@ -5,6 +5,7 @@ import 'package:lottie/lottie.dart';
 
 import '../../core/api/api_error.dart';
 import '../../core/lottie/lottie_assets.dart';
+import '../../core/widgets/celebration_dialog.dart';
 import '../../core/preferences/lifestyle_prefs.dart';
 import '../dashboard/dashboard_controller.dart';
 import '../dashboard/dashboard_models.dart';
@@ -291,34 +292,13 @@ class _WeeklyReflectionScreenState extends ConsumerState<WeeklyReflectionScreen>
       ref.invalidate(dashboardHomeProvider);
       ref.invalidate(todayTasksProvider);
 
-      await showDialog<void>(
-        context: context,
-        barrierDismissible: true,
-        builder: (_) => AlertDialog(
-          title: const Text('Weekly saved'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              SizedBox(
-                height: 120,
-                width: 120,
-                child: LottieBuilder.asset(
-                  LottieAssets.success,
-                  repeat: false,
-                  fit: BoxFit.contain,
-                ),
-              ),
-              if (result.totalEmission != null)
-                Text('${result.totalEmission!.toStringAsFixed(1)} kg CO₂ estimated'),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: const Text('Done'),
-            ),
-          ],
-        ),
+      await showCelebrationDialog(
+        context,
+        title: 'Week Saved!',
+        subtitle: result.totalEmission != null
+            ? '${result.totalEmission!.toStringAsFixed(1)} kg CO\u2082 estimated this week'
+            : 'Your weekly reflection has been recorded.',
+        actionLabel: 'Continue',
       );
 
       if (!mounted) return;

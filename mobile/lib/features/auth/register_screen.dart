@@ -10,7 +10,8 @@ import 'package:image_picker/image_picker.dart';
 import '../../core/auth/auth_repository.dart';
 import '../../core/cloudinary/cloudinary_uploader.dart';
 import '../../core/lottie/lottie_assets.dart';
-import 'maharashtra_cities.dart';
+import '../../core/preferences/lifestyle_prefs.dart';
+import '../../core/data/station_catalog.dart';
 
 class RegisterScreen extends ConsumerStatefulWidget {
   const RegisterScreen({super.key});
@@ -24,6 +25,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
   final _email = TextEditingController();
   final _password = TextEditingController();
   String _role = 'student';
+  String? _state;
   String? _city;
   XFile? _pickedImage;
   String? _uploadedProfileUrl;
@@ -40,6 +42,10 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
   }
 
   Future<void> _submit() async {
+    if (_state == null) {
+      setState(() => _errorText = 'Please select your state.');
+      return;
+    }
     if (_city == null) {
       setState(() => _errorText = 'Please select your city.');
       return;
@@ -61,10 +67,13 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
             name: _name.text.trim(),
             email: _email.text.trim(),
             password: _password.text,
+            state: _state!,
             city: _city!,
             role: _role,
             profilePictureUrl: _uploadedProfileUrl!,
           );
+      // Clear any stale per-user prefs — new account must start clean.
+      await LifestylePrefs().clearUserSession();
       if (!mounted) return;
       context.go('/onboarding');
     } catch (e) {
@@ -177,16 +186,37 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
             ),
             const SizedBox(height: 12),
             DropdownMenu<String>(
-              label: const Text('City (Maharashtra)'),
+              label: const Text('State'),
               expandedInsets: EdgeInsets.zero,
               requestFocusOnTap: true,
               enableFilter: true,
               enableSearch: true,
-              onSelected: (value) => setState(() => _city = value),
-              dropdownMenuEntries: maharashtraCities
-                  .map((c) => DropdownMenuEntry<String>(value: c, label: c))
+              onSelected: (value) {
+                setState(() {
+                  _state = value;
+                  _city = null; // Clear city if state changes
+                });
+              },
+              dropdownMenuEntries: stationCatalog
+                  .map((s) => DropdownMenuEntry<String>(value: s.state, label: s.state))
                   .toList(growable: false),
             ),
+            if (_state != null) ...[
+              const SizedBox(height: 12),
+              DropdownMenu<String>(
+                label: const Text('City'),
+                expandedInsets: EdgeInsets.zero,
+                requestFocusOnTap: true,
+                enableFilter: true,
+                enableSearch: true,
+                onSelected: (value) => setState(() => _city = value),
+                dropdownMenuEntries: stationCatalog
+                    .firstWhere((s) => s.state == _state)
+                    .cities
+                    .map((c) => DropdownMenuEntry<String>(value: c.city, label: c.city))
+                    .toList(growable: false),
+              ),
+            ],
             const SizedBox(height: 12),
             Wrap(
               spacing: 8,

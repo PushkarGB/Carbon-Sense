@@ -5,6 +5,7 @@ import 'package:lottie/lottie.dart';
 
 import '../../core/auth/auth_repository.dart';
 import '../../core/lottie/lottie_assets.dart';
+import '../../core/preferences/lifestyle_prefs.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});
@@ -36,6 +37,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
             email: _email.text.trim(),
             password: _password.text,
           );
+      // Clear any stale per-user prefs from a previous session.
+      await LifestylePrefs().clearUserSession();
       if (!mounted) return;
       context.go('/splash');
     } catch (e) {

@@ -11,7 +11,9 @@ export type PublicUser = {
   name: string;
   email: string;
   role: User['role'];
+  state?: string;
   city: string;
+  station?: string;
   profile_picture_url: string;
   created_at: Date;
   updated_at: Date;
@@ -23,7 +25,9 @@ export type UserDocumentPublic = Pick<
   | 'name'
   | 'email'
   | 'role'
+  | 'state'
   | 'city'
+  | 'station'
   | 'profile_picture_url'
   | 'created_at'
   | 'updated_at'

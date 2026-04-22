@@ -17,6 +17,10 @@ export class RegisterDto {
 
   @IsString()
   @IsNotEmpty()
+  state?: string;
+
+  @IsString()
+  @IsNotEmpty()
   city: string;
 
   @IsString()

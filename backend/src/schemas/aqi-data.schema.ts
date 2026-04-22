@@ -2,6 +2,7 @@ import { Schema } from 'mongoose';
 
 export interface AqiData {
   city: string;
+  station?: string;
   aqi: number;
   pm25: number;
   pm10: number;
@@ -14,6 +15,7 @@ export interface AqiData {
 export const AqiDataSchema = new Schema<AqiData>(
   {
     city: { type: String, required: true },
+    station: { type: String, required: false },
     aqi: { type: Number, required: true },
     pm25: { type: Number, required: true },
     pm10: { type: Number, required: true },

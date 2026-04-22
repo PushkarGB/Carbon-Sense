@@ -36,22 +36,23 @@ export class AqiFetcherService {
   }
 
   /**
-   * Fetches AQI data from the AQICN API for a city slug and upserts into the database.
+   * Fetches AQI data from the AQICN API for a city slug (or station UID) and upserts into the database.
    */
-  async fetchAndStore(citySlug: string): Promise<AqiData | null> {
+  async fetchAndStore(slugOrUid: string, stationName?: string): Promise<AqiData | null> {
     const token = process.env.AQICN_API_TOKEN || 'demo';
-    const url = `https://api.waqi.info/feed/${encodeURIComponent(citySlug)}/?token=${token}`;
+    const isUid = slugOrUid.startsWith('@');
+    const url = `https://api.waqi.info/feed/${encodeURIComponent(slugOrUid)}/?token=${token}`;
 
     try {
       const response = await fetch(url);
       if (!response.ok) {
-        this.logger.warn(`AQICN API returned ${response.status} for ${citySlug}`);
+        this.logger.warn(`AQICN API returned ${response.status} for ${slugOrUid}`);
         return null;
       }
 
       const json = await response.json();
       if (json.status !== 'ok' || !json.data) {
-        this.logger.warn(`AQICN API returned non-ok status for ${citySlug}: ${json.status}`);
+        this.logger.warn(`AQICN API returned non-ok status for ${slugOrUid}: ${json.status}`);
         return null;
       }
 
@@ -59,7 +60,8 @@ export class AqiFetcherService {
       const iaqi = data.iaqi ?? {};
 
       const aqiDoc: Partial<AqiData> = {
-        city: citySlug,
+        city: isUid ? (stationName ? this.cityToSlug(stationName) : 'unknown') : slugOrUid,
+        station: stationName,
         aqi: data.aqi ?? 0,
         pm25: iaqi.pm25?.v ?? 0,
         pm10: iaqi.pm10?.v ?? 0,
@@ -69,8 +71,10 @@ export class AqiFetcherService {
         fetched_at: new Date(),
       };
 
+      const query = stationName ? { station: stationName } : { city: slugOrUid, station: { $exists: false } };
+
       await this.aqiDataModel.updateOne(
-        { city: citySlug },
+        query,
         { $set: aqiDoc },
         { upsert: true },
       );
@@ -78,9 +82,45 @@ export class AqiFetcherService {
       return aqiDoc as AqiData;
     } catch (error) {
       this.logger.error(
-        `Failed to fetch AQI for ${citySlug}: ${error instanceof Error ? error.message : String(error)}`,
+        `Failed to fetch AQI for ${slugOrUid}: ${error instanceof Error ? error.message : String(error)}`,
       );
       return null;
+    }
+  }
+
+  /**
+   * Returns cached AQI data for the given station.
+   */
+  async getAqiForStation(station: string, city: string): Promise<AqiData | null> {
+    const cached = await this.aqiDataModel
+      .findOne({ station })
+      .lean()
+      .exec();
+
+    if (cached && !this.isStale(cached.fetched_at)) {
+      return cached;
+    }
+
+    try {
+      const token = process.env.AQICN_API_TOKEN || 'demo';
+      // Search AQICN for the exact station name or keyword
+      const searchUrl = `https://api.waqi.info/search/?token=${token}&keyword=${encodeURIComponent(station)}`;
+      const searchRes = await fetch(searchUrl);
+      const searchJson = await searchRes.json();
+
+      if (searchJson.status === 'ok' && searchJson.data && searchJson.data.length > 0) {
+        // Use the UID of the first search result
+        const uid = searchJson.data[0].uid;
+        const fresh = await this.fetchAndStore(`@${uid}`, station);
+        return fresh ?? cached ?? null;
+      } else {
+        this.logger.warn(`Station search failed or empty for: ${station}, falling back to city: ${city}`);
+        // Fallback to city
+        return this.getAqiForCity(city);
+      }
+    } catch (e) {
+      this.logger.error(`Error searching station ${station}: ${e}`);
+      return this.getAqiForCity(city); // Fallback
     }
   }
 

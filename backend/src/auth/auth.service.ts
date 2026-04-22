@@ -43,6 +43,7 @@ export class AuthService {
       session.startTransaction();
 
       const user = new this.userModel({
+        state: dto.state,
         city: dto.city,
         created_at: now,
         email: dto.email,
@@ -66,6 +67,7 @@ export class AuthService {
         engagement_metrics: {
           app_open_count: 0,
           task_completion_rate: 0,
+          total_tasks_completed: 0,
           total_days_logged: 0,
         },
         weekly_insights: {
@@ -144,7 +146,9 @@ export class AuthService {
       name: user.name,
       email: user.email,
       role: user.role,
+      state: user.state,
       city: user.city,
+      station: user.station,
       profile_picture_url: user.profile_picture_url,
       created_at: user.created_at,
       updated_at: user.updated_at,

@@ -2,6 +2,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import '../../badges/remote_svg.dart';
 import 'package:lottie/lottie.dart';
 
 import '../../../core/notifications/notification_scheduler.dart';
@@ -565,10 +566,16 @@ class _BadgeTile extends StatelessWidget {
                           )
                         : Opacity(
                             opacity: badge.achieved ? 1 : 0.35,
-                            child: CachedNetworkImage(
+                            child: RemoteSvg(
                               imageUrl: badge.iconUrl,
+                              width: double.infinity,
+                              height: double.infinity,
                               fit: BoxFit.contain,
-                              errorWidget: (context, url, error) => Icon(
+                              colorFilter: badge.achieved
+                                  ? null
+                                  : const ColorFilter.mode(
+                                      Colors.grey, BlendMode.srcIn),
+                              placeholder: (context) => Icon(
                                 badge.achieved
                                     ? Icons.verified
                                     : Icons.lock_outline,

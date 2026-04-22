@@ -1,6 +1,6 @@
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'remote_svg.dart';
 
 import '../profile/profile_controller.dart';
 import '../profile/profile_models.dart';
@@ -95,10 +95,16 @@ class _GalleryBadgeTile extends StatelessWidget {
                           )
                         : Opacity(
                             opacity: badge.achieved ? 1 : 0.35,
-                            child: CachedNetworkImage(
+                            child: RemoteSvg(
                               imageUrl: badge.iconUrl,
+                              width: double.infinity,
+                              height: double.infinity,
                               fit: BoxFit.contain,
-                              errorWidget: (context, url, error) => Icon(
+                              colorFilter: badge.achieved
+                                  ? null
+                                  : const ColorFilter.mode(
+                                      Colors.grey, BlendMode.srcIn),
+                              placeholder: (context) => Icon(
                                 badge.achieved ? Icons.verified : Icons.lock_outline,
                                 size: 40,
                                 color: badge.achieved ? cs.primary : cs.onSurfaceVariant,
@@ -257,14 +263,20 @@ class _GalleryBadgeTile extends StatelessWidget {
                             color: tierColor,
                             size: 56,
                           )
-                        : CachedNetworkImage(
+                        : RemoteSvg(
                             imageUrl: badge.iconUrl,
+                            width: double.infinity,
+                            height: double.infinity,
                             fit: BoxFit.contain,
-                            errorWidget: (context, url, error) => Icon(
+                            colorFilter: badge.achieved
+                                ? null
+                                : const ColorFilter.mode(
+                                    Colors.grey, BlendMode.srcIn),
+                            placeholder: (context) => Icon(
                               badge.achieved
                                   ? Icons.workspace_premium
                                   : Icons.lock_outline,
-                              color: tierColor,
+                              color: tierColor.withValues(alpha: 0.5),
                               size: 56,
                             ),
                           ),

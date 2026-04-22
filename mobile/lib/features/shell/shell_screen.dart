@@ -1,9 +1,9 @@
 import 'dart:async';
 
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import '../badges/remote_svg.dart';
 import 'package:lottie/lottie.dart';
 
 import '../../core/preferences/lifestyle_prefs.dart';
@@ -49,6 +49,14 @@ class _ShellScreenState extends ConsumerState<ShellScreen> {
       next.whenData((profile) {
         Future(() => _handleBadgeUnlocks(profile)).ignore();
       });
+    });
+
+    // Badge engine evaluation is async (setImmediate on the backend).
+    // When the user returns from the activity wizard, profileProvider may
+    // resolve before the badge is actually written to the DB.  Re-fetch
+    // after a short delay to pick up any newly awarded badges.
+    Future.delayed(const Duration(seconds: 4), () {
+      if (mounted) ref.invalidate(profileProvider);
     });
   }
 
@@ -306,13 +314,14 @@ class _BadgeUnlockDialogState extends State<_BadgeUnlockDialog> {
                               color: gold,
                               size: 64,
                             )
-                          : CachedNetworkImage(
+                          : RemoteSvg(
                               imageUrl: widget.badge.iconUrl,
+                              width: double.infinity,
+                              height: double.infinity,
                               fit: BoxFit.contain,
-                              errorWidget:
-                                  (context, imageUrl, error) => Icon(
+                              placeholder: (context) => Icon(
                                 Icons.workspace_premium,
-                                color: gold,
+                                color: gold.withValues(alpha: 0.5),
                                 size: 64,
                               ),
                             ),

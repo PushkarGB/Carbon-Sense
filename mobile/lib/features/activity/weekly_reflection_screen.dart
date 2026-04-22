@@ -292,6 +292,7 @@ class _WeeklyReflectionScreenState extends ConsumerState<WeeklyReflectionScreen>
       ref.invalidate(dashboardHomeProvider);
       ref.invalidate(todayTasksProvider);
 
+      if (!context.mounted) return;
       await showCelebrationDialog(
         context,
         title: 'Week Saved!',

@@ -76,7 +76,7 @@ class _ActivityWizardScreenState extends ConsumerState<ActivityWizardScreen> {
         final yyyyMm = todayIstYyyyMm();
         final lastWaste = await prefs.readWasteLastUpdatedYyyyMm();
         final lastElec = await prefs.readElectricityLastUpdatedYyyyMm();
-        if (!mounted) return;
+        if (!context.mounted) return;
 
         // Prompt at month-end / month-start to keep monthly baselines fresh.
         if ((lastWaste != null && lastWaste != yyyyMm) ||
@@ -580,13 +580,7 @@ class _ActivityWizardScreenState extends ConsumerState<ActivityWizardScreen> {
       ref.invalidate(todayTasksProvider);
       ref.invalidate(profileProvider);
 
-      // Badge engine evaluation is async/event-driven on the backend.
-      // Re-fetch profile after a short delay so any newly awarded badges
-      // are caught by the shell_screen badge dialog listener.
-      Future.delayed(const Duration(seconds: 3), () {
-        if (mounted) ref.invalidate(profileProvider);
-      });
-
+      if (!context.mounted) return;
       await showCelebrationDialog(
         context,
         title: widget.type == ActivityType.daily

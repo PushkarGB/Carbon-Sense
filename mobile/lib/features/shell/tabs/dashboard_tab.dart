@@ -736,14 +736,14 @@ class _AqiCard extends StatelessWidget {
                       vertical: 10,
                     ),
                     decoration: BoxDecoration(
-                      color: aqiColor(aqi!.aqi),
+                      color: aqiColor(aqi.aqi),
                       borderRadius: BorderRadius.circular(14),
                     ),
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         Text(
-                          '${aqi!.aqi}',
+                          '${aqi.aqi}',
                           style: const TextStyle(
                             fontWeight: FontWeight.w900,
                             fontSize: 22,
@@ -751,7 +751,7 @@ class _AqiCard extends StatelessWidget {
                           ),
                         ),
                         Text(
-                          aqiLevel(aqi!.aqi),
+                          aqiLevel(aqi.aqi),
                           style: const TextStyle(
                             fontWeight: FontWeight.w700,
                             color: Colors.black,
@@ -766,11 +766,11 @@ class _AqiCard extends StatelessWidget {
                       spacing: 10,
                       runSpacing: 8,
                       children: [
-                        _pill(context, 'PM2.5', aqi!.pm25),
-                        _pill(context, 'PM10', aqi!.pm10),
-                        _pill(context, 'NO₂', aqi!.no2),
-                        _pill(context, 'SO₂', aqi!.so2),
-                        _pill(context, 'CO', aqi!.co),
+                        _pill(context, 'PM2.5', aqi.pm25),
+                        _pill(context, 'PM10', aqi.pm10),
+                        _pill(context, 'NO₂', aqi.no2),
+                        _pill(context, 'SO₂', aqi.so2),
+                        _pill(context, 'CO', aqi.co),
                       ],
                     ),
                   ),

@@ -8,6 +8,7 @@ import '../features/bootstrap/splash_screen.dart';
 import '../features/onboarding/onboarding_flow_screen.dart';
 import '../features/shell/shell_screen.dart';
 import '../features/tasks/tasks_today_screen.dart';
+import '../features/badges/badge_gallery_screen.dart';
 
 final goRouterProvider = Provider<GoRouter>((ref) {
   return GoRouter(
@@ -42,6 +43,10 @@ final goRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/tasks/today',
         builder: (context, state) => const TodayTasksScreen(),
+      ),
+      GoRoute(
+        path: '/badges',
+        builder: (context, state) => const BadgeGalleryScreen(),
       ),
       GoRoute(
         path: '/shell/:tab',

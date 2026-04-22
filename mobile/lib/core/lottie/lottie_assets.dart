@@ -4,6 +4,8 @@ class LottieAssets {
   static const error = 'assets/lottie/error.json';
   static const empty = 'assets/lottie/empty.json';
   static const success = 'assets/lottie/success.json';
+  static const streakFire = 'assets/lottie/streak_fire.json';
+  static const streakLost = 'assets/lottie/streak_lost.json';
 
   static const onboardingTravel = 'assets/lottie/onboarding_travel.json';
   static const onboardingEnergy = 'assets/lottie/onboarding_energy.json';

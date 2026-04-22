@@ -2,9 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:lottie/lottie.dart';
+import 'package:permission_handler/permission_handler.dart';
 
 import '../../core/bootstrap/bootstrap_controller.dart';
 import '../../core/lottie/lottie_assets.dart';
+import '../../core/notifications/notification_scheduler.dart';
 
 class SplashScreen extends ConsumerWidget {
   const SplashScreen({super.key});
@@ -21,6 +23,9 @@ class SplashScreen extends ConsumerWidget {
           if (!result.onboardingCompleted) {
             context.go('/onboarding');
           } else {
+            // Schedule notifications for authenticated users.
+            // Fire-and-forget — don't block navigation.
+            _setupNotifications();
             context.go('/shell/dashboard');
           }
         }
@@ -107,4 +112,15 @@ class SplashScreen extends ConsumerWidget {
       ),
     );
   }
+}
+
+/// Request notification permission (Android 13+) and schedule all
+/// recurring notification alarms.  Runs fire-and-forget from [SplashScreen].
+Future<void> _setupNotifications() async {
+  // On Android 13+ this will show the system permission dialog.
+  // On older versions it's a no-op that returns granted.
+  final status = await Permission.notification.request();
+  if (!status.isGranted) return;
+
+  await scheduleAllNotifications();
 }

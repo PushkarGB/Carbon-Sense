@@ -211,17 +211,47 @@ class _InsightsBody extends ConsumerWidget {
                             ],
                             isCurved: true,
                             color: cs.primary,
-                            barWidth: 3,
-                            dotData: const FlDotData(show: false),
+                            barWidth: 4,
+                            dotData: const FlDotData(show: true),
                             belowBarData: BarAreaData(
                               show: true,
-                              color: cs.primary.withValues(alpha: 0.12),
+                              gradient: LinearGradient(
+                                begin: Alignment.topCenter,
+                                end: Alignment.bottomCenter,
+                                colors: [
+                                  cs.primary.withValues(alpha: 0.4),
+                                  cs.primary.withValues(alpha: 0.0),
+                                ],
+                              ),
                             ),
                           ),
                         ],
                       ),
                     ),
                   ),
+                const SizedBox(height: 16),
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: cs.secondaryContainer,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(Icons.insights, color: cs.onSecondaryContainer),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          'Your emissions are ${summary.trend} compared to the previous period. Keep tracking to maintain awareness!',
+                          style: TextStyle(
+                            color: cs.onSecondaryContainer,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
               ],
             ),
           ),

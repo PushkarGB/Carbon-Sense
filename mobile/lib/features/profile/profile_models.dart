@@ -27,6 +27,9 @@ class ProfileResponse {
             as Map<String, dynamic>;
     final profileStreak = (profile['streak_days'] as num?)?.toInt() ?? 0;
 
+    final leaderboard =
+        (json['leaderboard'] ?? const <String, dynamic>{}) as Map<String, dynamic>;
+
     return ProfileResponse(
       user: ProfileUser.fromJson(
         (json['user'] ?? const {}) as Map<String, dynamic>,
@@ -34,6 +37,8 @@ class ProfileResponse {
       summary: ProfileSummary.fromJson(
         (json['summary'] ?? const {}) as Map<String, dynamic>,
         fallbackStreakDays: profileStreak,
+        totalDaysLogged: (leaderboard['total_days_logged'] as num?)?.toInt() ?? 0,
+        avgEmission: (leaderboard['avg_emission'] as num?)?.toDouble() ?? 0,
       ),
       badges: badges,
       performance: PerformanceMetricsLite.fromJson(profilePerf),
@@ -85,12 +90,14 @@ class ProfileSummary {
   factory ProfileSummary.fromJson(
     Map<String, dynamic> json, {
     int fallbackStreakDays = 0,
+    int totalDaysLogged = 0,
+    double avgEmission = 0,
   }) {
     return ProfileSummary(
       streakDays: (json['streak_days'] as num?)?.toInt() ?? fallbackStreakDays,
-      totalDaysLogged: (json['total_days_logged'] as num?)?.toInt() ?? 0,
+      totalDaysLogged: totalDaysLogged,
       badgesUnlocked: (json['badges_unlocked'] as num?)?.toInt() ?? 0,
-      avgEmission: (json['avg_emission'] as num?)?.toDouble() ?? 0,
+      avgEmission: avgEmission,
       reductionPercent: (json['reduction_percent'] as num?)?.toDouble() ?? 0,
     );
   }
@@ -104,6 +111,9 @@ class BadgeItem {
     required this.iconUrl,
     required this.tier,
     required this.achieved,
+    required this.threshold,
+    required this.currentValue,
+    required this.awardedAt,
   });
 
   final String badgeId;
@@ -112,6 +122,9 @@ class BadgeItem {
   final String iconUrl;
   final String tier; // bronze|silver|gold|platinum
   final bool achieved;
+  final int threshold;
+  final num currentValue;
+  final DateTime? awardedAt;
 
   factory BadgeItem.fromJson(Map<String, dynamic> json) {
     return BadgeItem(
@@ -121,6 +134,9 @@ class BadgeItem {
       iconUrl: (json['icon_url'] ?? '') as String,
       tier: (json['tier'] ?? '') as String,
       achieved: json['achieved'] as bool? ?? false,
+      threshold: (json['threshold'] as num?)?.toInt() ?? 0,
+      currentValue: (json['current_value'] as num?) ?? 0,
+      awardedAt: DateTime.tryParse((json['awarded_at'] ?? '').toString()),
     );
   }
 }

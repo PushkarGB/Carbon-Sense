@@ -71,8 +71,9 @@ describe('AppService', () => {
 
     beforeEach(() => {
       // Mock getDateStringInTimeZone to return today for "now" and yesterday for the yesterday calc
-      jest.spyOn(logic, 'getDateStringInTimeZone').mockImplementation(
-        (date: Date) => {
+      jest
+        .spyOn(logic, 'getDateStringInTimeZone')
+        .mockImplementation((date: Date) => {
           // If the date is roughly yesterday (within a day of today minus ~24h), return yesterday
           const now = new Date();
           const diffMs = now.getTime() - date.getTime();
@@ -80,54 +81,83 @@ describe('AppService', () => {
             return yesterday;
           }
           return today;
-        },
-      );
+        });
     });
 
     it('should throw if missing profile', async () => {
       mockUserProfileModel.exec.mockResolvedValueOnce(null);
-      await expect(service.handleAppOpen(userId)).rejects.toThrow(InternalServerErrorException);
+      await expect(service.handleAppOpen(userId)).rejects.toThrow(
+        InternalServerErrorException,
+      );
     });
 
     it('should instantly return if last_streak_update is today', async () => {
-      mockUserProfileModel.exec.mockResolvedValueOnce({ _id: userId, last_streak_update: today });
+      mockUserProfileModel.exec.mockResolvedValueOnce({
+        _id: userId,
+        last_streak_update: today,
+      });
       const res = await service.handleAppOpen(userId);
       expect(mockUserProfileModel.updateOne).toHaveBeenCalledWith(
         { _id: userId },
-        { $inc: { 'engagement_metrics.app_open_count': 1 } }
+        { $inc: { 'engagement_metrics.app_open_count': 1 } },
       );
       expect(res.streak_updated).toBe(false);
     });
 
     it('should break streak to 1 if last_streak_update is NOT yesterday (pure app-open streak)', async () => {
       // last_streak_update is 2 days ago → streak resets to 1
-      mockUserProfileModel.exec.mockResolvedValueOnce({ _id: userId, last_streak_update: '2026-04-10', streak_days: 5 });
+      mockUserProfileModel.exec.mockResolvedValueOnce({
+        _id: userId,
+        last_streak_update: '2026-04-10',
+        streak_days: 5,
+      });
 
       const res = await service.handleAppOpen(userId);
 
       expect(mockUserProfileModel.updateOne).toHaveBeenCalledWith(
         { _id: userId },
-        { $set: { streak_days: 1, last_streak_update: today } }
+        { $set: { streak_days: 1, last_streak_update: today } },
       );
       expect(res.streak_updated).toBe(true);
       expect(res.streak_days).toBe(1);
+      expect(res.streak_lost).toBe(true);
+      expect(res.previous_streak_days).toBe(5);
       // DailyActivityLogModel is NOT consulted — streak is decoupled from submissions
       expect(mockDailyActivityLogModel.exists).not.toHaveBeenCalled();
     });
 
     it('should increment streak if last_streak_update is yesterday (consecutive app opens)', async () => {
       // last_streak_update is yesterday → streak increments (no submission check needed)
-      mockUserProfileModel.exec.mockResolvedValueOnce({ _id: userId, last_streak_update: yesterday, streak_days: 5 });
+      mockUserProfileModel.exec.mockResolvedValueOnce({
+        _id: userId,
+        last_streak_update: yesterday,
+        streak_days: 5,
+      });
 
       const res = await service.handleAppOpen(userId);
 
       expect(res.streak_days).toBe(6);
+      expect(res.streak_lost).toBe(false);
+      expect(res.previous_streak_days).toBe(5);
       expect(mockUserProfileModel.updateOne).toHaveBeenCalledWith(
         { _id: userId },
-        { $set: { streak_days: 6, last_streak_update: today } }
+        { $set: { streak_days: 6, last_streak_update: today } },
       );
       // DailyActivityLogModel is NOT consulted — streak is purely app-open based
       expect(mockDailyActivityLogModel.exists).not.toHaveBeenCalled();
+    });
+    it('should not mark the first app-open streak as lost', async () => {
+      mockUserProfileModel.exec.mockResolvedValueOnce({
+        _id: userId,
+        last_streak_update: '1970-01-01',
+        streak_days: 0,
+      });
+
+      const res = await service.handleAppOpen(userId);
+
+      expect(res.streak_days).toBe(1);
+      expect(res.streak_lost).toBe(false);
+      expect(res.previous_streak_days).toBe(0);
     });
   });
 });

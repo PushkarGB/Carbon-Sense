@@ -1,66 +1,30 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:lottie/lottie.dart';
 
+import '../../../core/notifications/notification_scheduler.dart';
+
 import '../../../core/api/api_error.dart';
+import '../../../core/auth/auth_repository.dart';
+import '../../../core/bootstrap/bootstrap_controller.dart';
 import '../../../core/lottie/lottie_assets.dart';
+import '../../../core/preferences/lifestyle_prefs.dart';
+import '../../dashboard/dashboard_controller.dart';
+import '../../insights/insights_controller.dart';
 import '../../profile/profile_controller.dart';
 import '../../profile/profile_models.dart';
+import '../../tasks/tasks_controller.dart';
 
-class ProfileTab extends ConsumerStatefulWidget {
+class ProfileTab extends ConsumerWidget {
   const ProfileTab({super.key});
 
   @override
-  ConsumerState<ProfileTab> createState() => _ProfileTabState();
-}
-
-class _ProfileTabState extends ConsumerState<ProfileTab> {
-  int? _lastBadgeCount;
-
-  @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final state = ref.watch(profileProvider);
     final width = MediaQuery.sizeOf(context).width;
     final heroHeight = (width * 0.30).clamp(90.0, 150.0);
-    ref.listen(profileProvider, (_, next) {
-      next.whenData((profile) async {
-        final current = profile.summary.badgesUnlocked;
-        if (_lastBadgeCount != null &&
-            current > (_lastBadgeCount ?? 0) &&
-            mounted) {
-          await showDialog<void>(
-            context: context,
-            builder: (_) => AlertDialog(
-              title: const Text('Badge unlocked'),
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  SizedBox(
-                    height: 100,
-                    width: 100,
-                    child: LottieBuilder.asset(
-                      LottieAssets.success,
-                      repeat: false,
-                      fit: BoxFit.contain,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text('You earned a new badge. Keep going!'),
-                ],
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.of(context).pop(),
-                  child: const Text('Nice'),
-                ),
-              ],
-            ),
-          );
-        }
-        _lastBadgeCount = current;
-      });
-    });
 
     return SafeArea(
       child: ListView(
@@ -168,13 +132,13 @@ class _ErrorCard extends StatelessWidget {
   }
 }
 
-class _ProfileBody extends StatelessWidget {
+class _ProfileBody extends ConsumerWidget {
   const _ProfileBody({required this.profile});
 
   final ProfileResponse profile;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -182,11 +146,155 @@ class _ProfileBody extends StatelessWidget {
         const SizedBox(height: 12),
         _StatsRow(summary: profile.summary),
         const SizedBox(height: 12),
-        _Performance(perf: profile.performance),
-        const SizedBox(height: 12),
         _BadgeGallery(badges: profile.badges),
+        const SizedBox(height: 12),
+        const _NotificationsToggle(),
+        const SizedBox(height: 12),
+        _LogoutCard(ref: ref),
       ],
     );
+  }
+}
+
+class _NotificationsToggle extends StatefulWidget {
+  const _NotificationsToggle();
+
+  @override
+  State<_NotificationsToggle> createState() => _NotificationsToggleState();
+}
+
+class _NotificationsToggleState extends State<_NotificationsToggle> {
+  bool _enabled = true;
+  bool _loaded = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    final val = await LifestylePrefs().readNotificationsEnabled();
+    if (!mounted) return;
+    setState(() {
+      _enabled = val;
+      _loaded = true;
+    });
+  }
+
+  Future<void> _toggle(bool value) async {
+    setState(() => _enabled = value);
+    await LifestylePrefs().writeNotificationsEnabled(value);
+    if (value) {
+      await scheduleAllNotifications();
+    } else {
+      await cancelAllNotifications();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        child: Row(
+          children: [
+            const Icon(Icons.notifications_active_outlined),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                'Push Notifications',
+                style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ),
+            if (!_loaded)
+              const SizedBox(
+                height: 20,
+                width: 20,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              )
+            else
+              Switch.adaptive(
+                value: _enabled,
+                onChanged: _toggle,
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _LogoutCard extends StatelessWidget {
+  const _LogoutCard({required this.ref});
+
+  final WidgetRef ref;
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Row(
+          children: [
+            Icon(Icons.logout, color: cs.error),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                'Log out',
+                style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ),
+            TextButton(
+              onPressed: () => _confirmLogout(context),
+              style: TextButton.styleFrom(foregroundColor: cs.error),
+              child: const Text('Log out'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _confirmLogout(BuildContext context) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Log out?'),
+        content: const Text('You can log back in anytime with your account.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('Log out'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true || !context.mounted) return;
+
+    await cancelAllNotifications();
+    await ref.read(authRepositoryProvider).logout();
+    await LifestylePrefs().clearUserSession();
+    ref
+      ..invalidate(bootstrapProvider)
+      ..invalidate(dashboardHomeProvider)
+      ..invalidate(insightsSummaryProvider)
+      ..invalidate(profileProvider)
+      ..invalidate(todayTasksProvider);
+
+    if (context.mounted) {
+      context.go('/auth/login');
+    }
   }
 }
 
@@ -336,113 +444,7 @@ class _Stat extends StatelessWidget {
   }
 }
 
-class _Performance extends StatelessWidget {
-  const _Performance({required this.perf});
-
-  final PerformanceMetricsLite perf;
-
-  @override
-  Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-    final reduction = perf.reductionPercent;
-    final positive = reduction >= 0;
-
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Performance',
-              style: Theme.of(
-                context,
-              ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
-            ),
-            const SizedBox(height: 10),
-            Row(
-              children: [
-                Expanded(
-                  child: _perfMetric(
-                    context,
-                    label: 'Baseline',
-                    value: perf.baselineEmission.toStringAsFixed(1),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: _perfMetric(
-                    context,
-                    label: 'Current avg',
-                    value: perf.currentAvgEmission.toStringAsFixed(1),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 10),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-              decoration: BoxDecoration(
-                color: cs.surfaceContainerHighest,
-                borderRadius: BorderRadius.circular(14),
-              ),
-              child: Row(
-                children: [
-                  Icon(
-                    positive ? Icons.trending_down : Icons.trending_up,
-                    color: positive ? cs.primary : cs.error,
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      '${reduction.abs().toStringAsFixed(1)}% ${positive ? 'reduction' : 'increase'}',
-                      style: const TextStyle(fontWeight: FontWeight.w900),
-                    ),
-                  ),
-                  Text(
-                    perf.baselineStatus,
-                    style: TextStyle(
-                      color: cs.onSurfaceVariant,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _perfMetric(
-    BuildContext context, {
-    required String label,
-    required String value,
-  }) {
-    final cs = Theme.of(context).colorScheme;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-      decoration: BoxDecoration(
-        color: cs.surfaceContainerHighest,
-        borderRadius: BorderRadius.circular(14),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(label, style: TextStyle(color: cs.onSurfaceVariant)),
-          const SizedBox(height: 2),
-          Text(
-            '$value kg',
-            style: Theme.of(
-              context,
-            ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w900),
-          ),
-        ],
-      ),
-    );
-  }
-}
+// Removed _Performance section
 
 class _BadgeGallery extends StatelessWidget {
   const _BadgeGallery({required this.badges});
@@ -453,7 +455,7 @@ class _BadgeGallery extends StatelessWidget {
   Widget build(BuildContext context) {
     final achieved = badges.where((b) => b.achieved).toList();
     final locked = badges.where((b) => !b.achieved).toList();
-    final ordered = [...achieved, ...locked];
+    final ordered = [...achieved, ...locked].take(3).toList();
 
     return Card(
       child: Padding(
@@ -461,11 +463,20 @@ class _BadgeGallery extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              'Badges',
-              style: Theme.of(
-                context,
-              ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  'Top Badges',
+                  style: Theme.of(
+                    context,
+                  ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
+                ),
+                TextButton(
+                  onPressed: () => context.push('/badges'),
+                  child: const Text('See all'),
+                ),
+              ],
             ),
             const SizedBox(height: 12),
             if (ordered.isEmpty)

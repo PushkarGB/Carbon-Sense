@@ -1,3 +1,5 @@
+import 'dart:ui';
+
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
@@ -9,8 +11,10 @@ import '../../../core/api/api_error.dart';
 import '../../../core/lottie/lottie_assets.dart';
 import '../../../core/preferences/lifestyle_prefs.dart';
 import '../../dashboard/aqi_color.dart';
+import '../../dashboard/aqi_station_picker.dart';
 import '../../dashboard/dashboard_controller.dart';
 import '../../dashboard/dashboard_models.dart';
+import '../../tasks/awareness_signals.dart';
 import '../../activity/ist_date.dart';
 
 class DashboardTab extends ConsumerWidget {
@@ -19,6 +23,10 @@ class DashboardTab extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final state = ref.watch(dashboardHomeProvider);
+    ref.read(awarenessSignalsProvider).sendOnce(
+      'aqi_screen_viewed',
+      const {'aqi_screen_viewed': true},
+    );
     final width = MediaQuery.sizeOf(context).width;
     final heroHeight = (width * 0.34).clamp(110.0, 170.0);
 
@@ -62,10 +70,18 @@ class _StreakPopupGateState extends ConsumerState<_StreakPopupGate> {
     super.didChangeDependencies();
     if (_checked) return;
     _checked = true;
-    _maybeShow();
+    // Let the dashboard render first, then show the popup after a short delay
+    // so it feels intentional rather than an instant flash.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _maybeShow();
+    });
   }
 
   Future<void> _maybeShow() async {
+    // Small pause so the dashboard is visually settled before the overlay appears.
+    await Future<void>.delayed(const Duration(milliseconds: 600));
+    if (!mounted) return;
+
     final prefs = LifestylePrefs();
     final today = todayIstYyyyMmDd();
     final pending = await prefs.readStreakPopupPendingYmd();
@@ -75,26 +91,186 @@ class _StreakPopupGateState extends ConsumerState<_StreakPopupGate> {
     if (pending != today || shown == today) return;
     final value = await prefs.readStreakPopupValue();
     if (!mounted || value == null || value <= 0) return;
+    final lost = await prefs.readStreakPopupLost();
+    final previousValue = await prefs.readStreakPopupPreviousValue() ?? 0;
 
-    await showDialog<void>(
-      context: context,
-      builder: (_) => AlertDialog(
-        title: const Text('Streak updated'),
-        content: Text('You’re on a $value-day streak.'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Nice'),
-          ),
-        ],
-      ),
+    if (lost && previousValue > 0) {
+      await _showStreakDialog(
+        animationAsset: LottieAssets.streakLost,
+        title: 'Streak Lost',
+        message:
+            'Your $previousValue-day streak was reset because a day was missed.',
+        actionLabel: 'Continue',
+      );
+      if (!mounted) return;
+    }
+
+    // Use the same premium animated dialog for streak updates.
+    await _showStreakDialog(
+      animationAsset: LottieAssets.streakFire,
+      title: value == 1 ? 'New Streak Started!' : '🔥 $value-Day Streak!',
+      message: value == 1
+          ? 'Great start! Log your eco actions daily to build your streak.'
+          : 'You\'re on a $value-day streak. Keep tracking your eco actions!',
+      actionLabel: 'Awesome',
     );
 
+    if (!mounted) return;
     await prefs.writeStreakPopupShownYmd(today);
+  }
+
+  Future<void> _showStreakDialog({
+    required String animationAsset,
+    required String title,
+    required String message,
+    required String actionLabel,
+  }) {
+    return showGeneralDialog<void>(
+      context: context,
+      barrierDismissible: true,
+      barrierLabel: title,
+      barrierColor: Colors.black.withValues(alpha: 0.28),
+      transitionDuration: const Duration(milliseconds: 340),
+      pageBuilder: (dialogContext, animation, secondaryAnimation) {
+        return BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 14, sigmaY: 14),
+          child: _ElevatedStreakDialog(
+            animationAsset: animationAsset,
+            title: title,
+            message: message,
+            actionLabel: actionLabel,
+          ),
+        );
+      },
+      transitionBuilder: (dialogContext, animation, secondaryAnimation, child) {
+        final curved = CurvedAnimation(
+          parent: animation,
+          curve: Curves.easeOutCubic,
+        );
+        return FadeTransition(
+          opacity: curved,
+          child: ScaleTransition(
+            scale: Tween<double>(begin: 0.9, end: 1).animate(curved),
+            child: child,
+          ),
+        );
+      },
+    );
   }
 
   @override
   Widget build(BuildContext context) => widget.child;
+}
+
+class _ElevatedStreakDialog extends StatelessWidget {
+  const _ElevatedStreakDialog({
+    required this.animationAsset,
+    required this.title,
+    required this.message,
+    required this.actionLabel,
+  });
+
+  final String animationAsset;
+  final String title;
+  final String message;
+  final String actionLabel;
+
+  @override
+  Widget build(BuildContext context) {
+    const flame = Color(0xFFFFB74D);
+    const ember = Color(0xFFFF7043);
+
+    return Dialog(
+      backgroundColor: Colors.transparent,
+      elevation: 0,
+      insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(24, 24, 24, 20),
+        decoration: BoxDecoration(
+          color: Colors.white.withValues(alpha: 0.08),
+          borderRadius: BorderRadius.circular(28),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.32)),
+          boxShadow: [
+            BoxShadow(
+              color: ember.withValues(alpha: 0.24),
+              blurRadius: 42,
+              spreadRadius: 3,
+            ),
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.36),
+              blurRadius: 34,
+              offset: const Offset(0, 18),
+            ),
+          ],
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            SizedBox(
+              height: 154,
+              width: 154,
+              child: LottieBuilder.asset(
+                animationAsset,
+                repeat: false,
+                fit: BoxFit.contain,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              title,
+              textAlign: TextAlign.center,
+              style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                color: Colors.white,
+                fontWeight: FontWeight.w900,
+                shadows: [
+                  Shadow(
+                    color: flame.withValues(alpha: 0.72),
+                    blurRadius: 18,
+                  ),
+                  Shadow(
+                    color: Colors.black.withValues(alpha: 0.5),
+                    blurRadius: 10,
+                    offset: const Offset(0, 3),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 10),
+            Text(
+              message,
+              textAlign: TextAlign.center,
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                color: Colors.white.withValues(alpha: 0.88),
+                fontWeight: FontWeight.w700,
+                height: 1.45,
+                shadows: [
+                  Shadow(
+                    color: Colors.black.withValues(alpha: 0.7),
+                    blurRadius: 8,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 24),
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton(
+                onPressed: () => Navigator.of(context).pop(),
+                style: FilledButton.styleFrom(
+                  backgroundColor: flame,
+                  foregroundColor: const Color(0xFF241407),
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  textStyle: const TextStyle(fontWeight: FontWeight.w900),
+                ),
+                child: Text(actionLabel),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 class _DashboardLoading extends StatelessWidget {
@@ -186,15 +362,11 @@ class _DashboardBody extends StatelessWidget {
         const SizedBox(height: 16),
         _TodayEmissionCard(todayEmission: home.todayEmission),
         const SizedBox(height: 12),
-        _AqiCard(aqi: home.aqi),
+        _AqiCard(home: home),
         const SizedBox(height: 12),
         _TasksProgressCard(progress: home.tasksProgress),
         const SizedBox(height: 12),
         _PerformanceCard(perf: home.performance),
-        if (home.projectionNext30Days != null) ...[
-          const SizedBox(height: 12),
-          _ProjectionCard(values: home.projectionNext30Days!),
-        ],
         if (!home.onboardingCompleted) ...[
           const SizedBox(height: 12),
           _OnboardingBanner(),
@@ -212,53 +384,77 @@ class _Header extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
+    const startColor = Color(0xFF0F2027);
+    const midColor = Color(0xFF203A43);
+    const endColor = Color(0xFF2C5364);
 
-    return Row(
-      children: [
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Hi, ${user.name}',
-                style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                  fontWeight: FontWeight.w800,
-                ),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                '${user.city} • ${user.role}',
-                style: Theme.of(
-                  context,
-                ).textTheme.bodyMedium?.copyWith(color: cs.onSurfaceVariant),
-              ),
-            ],
-          ),
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [startColor, midColor, endColor],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
         ),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-          decoration: BoxDecoration(
-            color: cs.primaryContainer,
-            borderRadius: BorderRadius.circular(999),
-          ),
-          child: Row(
-            children: [
-              Icon(Icons.local_fire_department, color: cs.onPrimaryContainer),
-              const SizedBox(width: 6),
-              Text(
-                '$streakDays',
-                style: TextStyle(
-                  color: cs.onPrimaryContainer,
-                  fontWeight: FontWeight.w800,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.15),
+            offset: const Offset(0, 8),
+            blurRadius: 20,
+          )
+        ],
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Hi, ${user.name}',
+                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                    fontWeight: FontWeight.w900,
+                    color: Colors.white,
+                  ),
                 ),
-              ),
-            ],
+                const SizedBox(height: 4),
+                Text(
+                  '${user.city} • ${user.role}',
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: Colors.white70,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
           ),
-        ),
-        const SizedBox(width: 12),
-        _Avatar(url: user.profilePictureUrl, name: user.name),
-      ],
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.2),
+              borderRadius: BorderRadius.circular(999),
+              border: Border.all(color: Colors.white.withValues(alpha: 0.3)),
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.local_fire_department, color: Colors.amberAccent, size: 20),
+                const SizedBox(width: 6),
+                Text(
+                  '$streakDays',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w900,
+                    fontSize: 16,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 16),
+          _Avatar(url: user.profilePictureUrl, name: user.name),
+        ],
+      ),
     );
   }
 }
@@ -489,13 +685,14 @@ class _BreakdownLegend extends StatelessWidget {
 }
 
 class _AqiCard extends StatelessWidget {
-  const _AqiCard({required this.aqi});
+  const _AqiCard({required this.home});
 
-  final AqiReading? aqi;
+  final DashboardHome home;
 
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
+    final aqi = home.aqi;
 
     return Card(
       child: Padding(
@@ -503,11 +700,26 @@ class _AqiCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              'Air quality (AQI)',
-              style: Theme.of(
-                context,
-              ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Expanded(
+                  child: Text(
+                    'Air quality (AQI) - ${aqi?.station ?? home.user.city}',
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                TextButton(
+                  onPressed: () => CompareCitySheet.show(context),
+                  style: TextButton.styleFrom(
+                    visualDensity: VisualDensity.compact,
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                  ),
+                  child: const Text('Compare'),
+                ),
+              ],
             ),
             const SizedBox(height: 10),
             if (aqi == null)
@@ -564,6 +776,17 @@ class _AqiCard extends StatelessWidget {
                   ),
                 ],
               ),
+            if (aqi != null) ...[
+              const SizedBox(height: 16),
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed: () => ChangeStationSheet.show(context, home.user.city),
+                  icon: const Icon(Icons.location_on_outlined, size: 18),
+                  label: const Text('Change Station'),
+                ),
+              ),
+            ],
           ],
         ),
       ),
@@ -765,63 +988,7 @@ class _PerformanceCard extends StatelessWidget {
   }
 }
 
-class _ProjectionCard extends StatelessWidget {
-  const _ProjectionCard({required this.values});
-
-  final List<double> values;
-
-  @override
-  Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-    final maxY = values.isEmpty ? 1.0 : values.reduce((a, b) => a > b ? a : b);
-
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              '30-day projection',
-              style: Theme.of(
-                context,
-              ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
-            ),
-            const SizedBox(height: 12),
-            SizedBox(
-              height: 170,
-              child: LineChart(
-                LineChartData(
-                  gridData: const FlGridData(show: false),
-                  titlesData: const FlTitlesData(show: false),
-                  borderData: FlBorderData(show: false),
-                  minY: 0,
-                  maxY: maxY * 1.15,
-                  lineBarsData: [
-                    LineChartBarData(
-                      spots: [
-                        for (var i = 0; i < values.length; i++)
-                          FlSpot(i.toDouble(), values[i]),
-                      ],
-                      isCurved: true,
-                      color: cs.primary,
-                      barWidth: 3,
-                      dotData: const FlDotData(show: false),
-                      belowBarData: BarAreaData(
-                        show: true,
-                        color: cs.primary.withValues(alpha: 0.12),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
+// _ProjectionCard removed
 
 class _OnboardingBanner extends StatelessWidget {
   @override

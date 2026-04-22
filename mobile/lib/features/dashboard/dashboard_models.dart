@@ -136,7 +136,9 @@ class DashboardUser {
   DashboardUser({
     required this.name,
     required this.email,
+    this.state,
     required this.city,
+    this.station,
     required this.role,
     required this.profilePictureUrl,
     required this.createdAt,
@@ -144,7 +146,9 @@ class DashboardUser {
 
   final String name;
   final String email;
+  final String? state;
   final String city;
+  final String? station;
   final String role;
   final String? profilePictureUrl;
   final DateTime? createdAt;
@@ -153,7 +157,9 @@ class DashboardUser {
     return DashboardUser(
       name: (json['name'] ?? '') as String,
       email: (json['email'] ?? '') as String,
+      state: json['state'] as String?,
       city: (json['city'] ?? '') as String,
+      station: json['station'] as String?,
       role: (json['role'] ?? '') as String,
       profilePictureUrl: json['profile_picture_url'] as String?,
       createdAt: DateTime.tryParse((json['created_at'] ?? '').toString()),
@@ -187,6 +193,7 @@ class AqiReading {
   AqiReading({
     required this.aqi,
     required this.city,
+    this.station,
     required this.pm25,
     required this.pm10,
     required this.no2,
@@ -196,6 +203,7 @@ class AqiReading {
 
   final int aqi;
   final String city;
+  final String? station;
   final double pm25;
   final double pm10;
   final double no2;
@@ -206,6 +214,7 @@ class AqiReading {
     return AqiReading(
       aqi: (json['aqi'] as num?)?.toInt() ?? 0,
       city: (json['city'] ?? '') as String,
+      station: json['station'] as String?,
       pm25: (json['pm25'] as num?)?.toDouble() ?? 0,
       pm10: (json['pm10'] as num?)?.toDouble() ?? 0,
       no2: (json['no2'] as num?)?.toDouble() ?? 0,

@@ -1,12 +1,12 @@
 class AppConfig {
   static const String apiBaseUrl = String.fromEnvironment(
     'API_BASE_URL',
-    defaultValue: 'https://carbon-sense-production.up.railway.app',
+    defaultValue: 'https://carbonsense-backend-ow0p.onrender.com',
   );
 
   static const String cloudinaryCloudName = String.fromEnvironment(
     'CLOUDINARY_CLOUD_NAME',
-    defaultValue: 'ddqpxsmxm',
+    defaultValue: 'dlveoyxax',
   );
 
   static const String cloudinaryUploadPreset = String.fromEnvironment(

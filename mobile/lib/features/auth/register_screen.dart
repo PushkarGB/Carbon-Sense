@@ -159,7 +159,45 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                 fit: BoxFit.contain,
               ),
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 16),
+            Center(
+              child: Stack(
+                alignment: Alignment.bottomRight,
+                children: [
+                  GestureDetector(
+                    onTap: (_submitting || _uploadingImage) ? null : _pickAndUpload,
+                    child: CircleAvatar(
+                      radius: 50,
+                      backgroundColor: cs.primaryContainer,
+                      backgroundImage: _pickedImage != null 
+                          ? FileImage(File(_pickedImage!.path)) 
+                          : null,
+                      child: _uploadingImage 
+                          ? CircularProgressIndicator(color: cs.onPrimaryContainer) 
+                          : (_pickedImage == null ? Icon(Icons.person, size: 50, color: cs.onPrimaryContainer) : null),
+                    ),
+                  ),
+                  if (!_uploadingImage)
+                    Positioned(
+                      bottom: 0,
+                      right: 0,
+                      child: GestureDetector(
+                        onTap: (_submitting || _uploadingImage) ? null : _pickAndUpload,
+                        child: Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: cs.primary,
+                            shape: BoxShape.circle,
+                            border: Border.all(color: Theme.of(context).scaffoldBackgroundColor, width: 2),
+                          ),
+                          child: Icon(Icons.camera_alt, size: 16, color: cs.onPrimary),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 24),
             TextField(
               controller: _name,
               textInputAction: TextInputAction.next,
@@ -238,43 +276,6 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                   ),
               ],
             ),
-            const SizedBox(height: 12),
-            ListTile(
-              contentPadding: EdgeInsets.zero,
-              title: const Text('Profile picture'),
-              subtitle: Text(
-                _uploadedProfileUrl != null
-                    ? 'Uploaded'
-                    : _uploadingImage
-                    ? 'Uploading…'
-                    : 'Pick an image to upload via Cloudinary',
-                style: TextStyle(color: cs.onSurfaceVariant),
-              ),
-              trailing: _uploadingImage
-                  ? SizedBox(
-                      height: 28,
-                      width: 28,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2.5,
-                        color: cs.primary,
-                      ),
-                    )
-                  : const Icon(Icons.cloud_upload_outlined),
-              onTap: (_submitting || _uploadingImage) ? null : _pickAndUpload,
-            ),
-            if (_pickedImage != null) ...[
-              const SizedBox(height: 12),
-              ClipRRect(
-                borderRadius: BorderRadius.circular(16),
-                child: AspectRatio(
-                  aspectRatio: 16 / 9,
-                  child: Image.file(
-                    File(_pickedImage!.path),
-                    fit: BoxFit.cover,
-                  ),
-                ),
-              ),
-            ],
             if (_errorText != null) ...[
               const SizedBox(height: 12),
               Text(_errorText!, style: TextStyle(color: cs.error)),

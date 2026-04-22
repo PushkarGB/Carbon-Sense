@@ -61,6 +61,22 @@ describe('InsightsService', () => {
           ]),
         ),
       } as never,
+      {
+        findOne: jest.fn().mockReturnValue(
+          createSortedQuery({
+            based_on_date: '2026-04-12',
+            input_days: 12,
+            model_version: 'projection_v1_linear_weighted',
+            next_30_days: [
+              { date: '2026-04-13', predicted_emission: 6.1 },
+            ],
+            year_end_projection: {
+              date: '2026-12-31',
+              predicted_emission: 5.2,
+            },
+          }),
+        ),
+      } as never,
       {} as never,
       aqiFetcherService as unknown as AqiFetcherService,
     );
@@ -71,6 +87,7 @@ describe('InsightsService', () => {
     expect(result.emissions).toHaveLength(3);
     expect(result.summary.average_emission).toBe(7);
     expect(result.latest_breakdown?.percentages.electricity).toBeGreaterThan(0);
+    expect(result.projection?.year_end_projection?.date).toBe('2026-12-31');
     expect(result.aqi?.aqi).toBe(80);
     expect(result.weekly_insights.total_weeks_logged).toBe(3);
   });

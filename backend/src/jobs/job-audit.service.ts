@@ -8,12 +8,13 @@ import { JobLog } from '../schemas/job-log.schema';
 import {
   BADGE_QUEUE_NAME,
   LEADERBOARD_QUEUE_NAME,
+  PROJECTION_QUEUE_NAME,
   TASK_QUEUE_NAME,
 } from './queue.constants';
 
 function mapQueueToJobLogType(
   queueName: string,
-): 'TASK_RESET' | 'LEADERBOARD' | 'BADGE_RETRY' {
+): 'TASK_RESET' | 'LEADERBOARD' | 'BADGE_RETRY' | 'PROJECTION_UPDATE' {
   switch (queueName) {
     case TASK_QUEUE_NAME:
       return 'TASK_RESET';
@@ -21,6 +22,8 @@ function mapQueueToJobLogType(
       return 'LEADERBOARD';
     case BADGE_QUEUE_NAME:
       return 'BADGE_RETRY';
+    case PROJECTION_QUEUE_NAME:
+      return 'PROJECTION_UPDATE';
     default:
       return 'TASK_RESET';
   }
@@ -114,6 +117,8 @@ function mapQueueToErrorModule(queueName: string): ErrorLog['module'] {
       return 'leaderboard';
     case BADGE_QUEUE_NAME:
       return 'badge';
+    case PROJECTION_QUEUE_NAME:
+      return 'projection';
     default:
       return 'task';
   }
@@ -131,6 +136,14 @@ function extractUserIdFromPayload(
 
   if (
     queueName === TASK_QUEUE_NAME &&
+    typeof record.user_id === 'string' &&
+    Types.ObjectId.isValid(record.user_id)
+  ) {
+    return record.user_id;
+  }
+
+  if (
+    queueName === PROJECTION_QUEUE_NAME &&
     typeof record.user_id === 'string' &&
     Types.ObjectId.isValid(record.user_id)
   ) {

@@ -168,7 +168,7 @@ function inferModuleFromPath(path: string): ErrorLogModule | undefined {
 function inferErrorType(
   module: ErrorLogModule | undefined,
 ): ErrorLogType {
-  if (module === 'badge' || module === 'leaderboard') {
+  if (module === 'badge' || module === 'leaderboard' || module === 'projection') {
     return 'NON_CRITICAL';
   }
 

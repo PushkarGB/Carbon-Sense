@@ -2,7 +2,7 @@ import { Schema } from 'mongoose';
 
 export interface JobLog {
   job_id: string;
-  type: 'TASK_RESET' | 'LEADERBOARD' | 'BADGE_RETRY';
+  type: 'TASK_RESET' | 'LEADERBOARD' | 'BADGE_RETRY' | 'PROJECTION_UPDATE';
   status: 'success' | 'failed';
   retry_count: number;
   payload: Record<string, unknown>;
@@ -17,7 +17,7 @@ export const JobLogSchema = new Schema<JobLog>(
     type: {
       type: String,
       required: true,
-      enum: ['TASK_RESET', 'LEADERBOARD', 'BADGE_RETRY'],
+      enum: ['TASK_RESET', 'LEADERBOARD', 'BADGE_RETRY', 'PROJECTION_UPDATE'],
     },
     status: { type: String, required: true, enum: ['success', 'failed'] },
     retry_count: { type: Number, required: true },

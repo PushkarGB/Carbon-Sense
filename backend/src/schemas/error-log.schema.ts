@@ -3,7 +3,7 @@ import { Schema, Types } from 'mongoose';
 export interface ErrorLog {
   error_id: string;
   type: 'CRITICAL' | 'NON_CRITICAL';
-  module: 'submission' | 'badge' | 'task' | 'leaderboard';
+  module: 'submission' | 'badge' | 'task' | 'leaderboard' | 'projection';
   user_id: Types.ObjectId;
   message: string;
   payload: Record<string, unknown>;
@@ -22,7 +22,7 @@ export const ErrorLogSchema = new Schema<ErrorLog>(
     module: {
       type: String,
       required: true,
-      enum: ['submission', 'badge', 'task', 'leaderboard'],
+      enum: ['submission', 'badge', 'task', 'leaderboard', 'projection'],
     },
     user_id: { type: Schema.Types.ObjectId, ref: 'User', required: true },
     message: { type: String, required: true },

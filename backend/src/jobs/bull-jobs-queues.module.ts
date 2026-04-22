@@ -5,6 +5,7 @@ import {
   DEFAULT_JOB_ATTEMPTS,
   DEFAULT_JOB_BACKOFF_MS,
   LEADERBOARD_QUEUE_NAME,
+  PROJECTION_QUEUE_NAME,
   TASK_QUEUE_NAME,
 } from './queue.constants';
 
@@ -24,6 +25,7 @@ const defaultJobOptions = {
       { name: TASK_QUEUE_NAME, defaultJobOptions },
       { name: LEADERBOARD_QUEUE_NAME, defaultJobOptions },
       { name: BADGE_QUEUE_NAME, defaultJobOptions },
+      { name: PROJECTION_QUEUE_NAME, defaultJobOptions },
     ),
   ],
   exports: [BullModule],

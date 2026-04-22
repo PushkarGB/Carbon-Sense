@@ -1,11 +1,16 @@
 import {
+  InjectQueue,
+} from '@nestjs/bullmq';
+import {
   BadRequestException,
   ConflictException,
   HttpException,
   Injectable,
   InternalServerErrorException,
+  Optional,
 } from '@nestjs/common';
 import { InjectConnection, InjectModel } from '@nestjs/mongoose';
+import { Queue } from 'bullmq';
 import { ClientSession, Connection, Model, Types } from 'mongoose';
 import { ErrorLogService } from '../resilience/error-log.service';
 import { CarbonRecord } from '../schemas/carbon-record.schema';
@@ -35,6 +40,11 @@ import {
   type PersonalizationBehaviorProfile,
   type TaskGenerationSignals,
 } from '../tasks/task-generation.engine';
+import {
+  JOB_NAME_PROJECTION_UPDATE,
+  JOB_PRIORITY_MEDIUM,
+  PROJECTION_QUEUE_NAME,
+} from '../jobs/queue.constants';
 
 type TaskStats = UserProfile['task_stats'];
 type BehaviorProfile = UserProfile['behavior_profile'];
@@ -61,6 +71,9 @@ export class ActivityService {
     private readonly activityEventsService: ActivityEventsService,
     private readonly emissionFactorService: EmissionFactorService,
     private readonly errorLogService: ErrorLogService,
+    @Optional()
+    @InjectQueue(PROJECTION_QUEUE_NAME)
+    private readonly projectionQueue?: Queue,
   ) {}
 
   async submitDailyActivity(
@@ -129,6 +142,7 @@ export class ActivityService {
 
       let emissionResultToEmit: any;
       let completedTaskIdsToEmit: string[] = [];
+      let shouldEnqueueProjectionUpdate = false;
 
       const result = await session.withTransaction(async () => {
         const existingLog = await this.dailyActivityLogModel
@@ -235,6 +249,8 @@ export class ActivityService {
           .session(session)
           .lean()
           .exec();
+
+        shouldEnqueueProjectionUpdate = carbonRecords.length >= 7;
       }
 
       const nextBehaviorProfile = this.buildBehaviorProfile(dailyLogs);
@@ -344,6 +360,10 @@ export class ActivityService {
       emissionResultToEmit,
       completedTaskIdsToEmit,
     );
+
+    if (submissionType === 'daily' && shouldEnqueueProjectionUpdate) {
+      await this.enqueueProjectionUpdateJob(userId, dto.date);
+    }
 
     return result;
     } finally {
@@ -916,6 +936,45 @@ export class ActivityService {
         });
       }
     });
+  }
+
+  private async enqueueProjectionUpdateJob(
+    userId: Types.ObjectId,
+    dateYmd: string,
+  ): Promise<void> {
+    if (!this.projectionQueue) {
+      return;
+    }
+
+    try {
+      await this.projectionQueue.add(
+        JOB_NAME_PROJECTION_UPDATE,
+        {
+          type: JOB_NAME_PROJECTION_UPDATE,
+          priority: 'medium',
+          user_id: userId.toString(),
+          date: dateYmd,
+          created_at: new Date().toISOString(),
+        },
+        {
+          jobId: `projection-${userId.toString()}-${dateYmd}`,
+          removeOnComplete: true,
+          priority: JOB_PRIORITY_MEDIUM,
+        },
+      );
+    } catch (error) {
+      await this.errorLogService.logFailure({
+        type: 'NON_CRITICAL',
+        module: 'projection',
+        userId,
+        message: 'Failed to enqueue PROJECTION_UPDATE',
+        payload: {
+          date: dateYmd,
+          user_id: userId.toString(),
+        },
+        error,
+      });
+    }
   }
 }
 

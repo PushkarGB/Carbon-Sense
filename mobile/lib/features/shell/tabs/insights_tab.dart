@@ -156,13 +156,20 @@ class _InsightsBody extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final cs = Theme.of(context).colorScheme;
     final emissions = summary.emissions;
+    final projection = summary.projection;
+    final projectedPoints = projection?.next30Days ?? const <ProjectionPoint>[];
 
-    final maxY = emissions.isEmpty
-        ? 1.0
-        : emissions
-                  .map((e) => e.totalEmission)
-                  .reduce((a, b) => a > b ? a : b) *
-              1.15;
+    final actualMax = emissions.isEmpty
+        ? 0.0
+        : emissions.map((e) => e.totalEmission).reduce((a, b) => a > b ? a : b);
+    final projectionMax = projectedPoints.isEmpty
+        ? 0.0
+        : projectedPoints
+              .map((e) => e.predictedEmission)
+              .reduce((a, b) => a > b ? a : b);
+    final chartMax = actualMax > projectionMax ? actualMax : projectionMax;
+
+    final maxY = chartMax <= 0 ? 1.0 : chartMax * 1.15;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -225,10 +232,60 @@ class _InsightsBody extends ConsumerWidget {
                               ),
                             ),
                           ),
+                          if (projectedPoints.isNotEmpty)
+                            LineChartBarData(
+                              spots: [
+                                if (emissions.isNotEmpty)
+                                  FlSpot(
+                                    (emissions.length - 1).toDouble(),
+                                    emissions.last.totalEmission,
+                                  ),
+                                for (var i = 0; i < projectedPoints.length; i++)
+                                  FlSpot(
+                                    (emissions.length + i).toDouble(),
+                                    projectedPoints[i].predictedEmission,
+                                  ),
+                              ],
+                              isCurved: true,
+                              color: cs.tertiary,
+                              barWidth: 3,
+                              dashArray: const [8, 5],
+                              dotData: const FlDotData(show: false),
+                              belowBarData: BarAreaData(
+                                show: true,
+                                gradient: LinearGradient(
+                                  begin: Alignment.topCenter,
+                                  end: Alignment.bottomCenter,
+                                  colors: [
+                                    cs.tertiary.withValues(alpha: 0.18),
+                                    cs.tertiary.withValues(alpha: 0.0),
+                                  ],
+                                ),
+                              ),
+                            ),
                         ],
                       ),
                     ),
                   ),
+                if (projectedPoints.isNotEmpty) ...[
+                  const SizedBox(height: 12),
+                  Wrap(
+                    spacing: 14,
+                    runSpacing: 8,
+                    children: [
+                      _legendChip(context, color: cs.primary, label: 'Actual'),
+                      _legendChip(
+                        context,
+                        color: cs.tertiary,
+                        label: 'Projection',
+                      ),
+                      Text(
+                        'Model: ${projection?.modelVersion ?? ''}',
+                        style: TextStyle(color: cs.onSurfaceVariant),
+                      ),
+                    ],
+                  ),
+                ],
                 const SizedBox(height: 16),
                 Container(
                   padding: const EdgeInsets.all(12),
@@ -269,6 +326,39 @@ class _InsightsBody extends ConsumerWidget {
       ],
     );
   }
+}
+
+Widget _legendChip(
+  BuildContext context, {
+  required Color color,
+  required String label,
+}) {
+  final cs = Theme.of(context).colorScheme;
+  return Container(
+    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+    decoration: BoxDecoration(
+      color: cs.surfaceContainerHighest,
+      borderRadius: BorderRadius.circular(999),
+    ),
+    child: Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 10,
+          height: 10,
+          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+        ),
+        const SizedBox(width: 8),
+        Text(
+          label,
+          style: TextStyle(
+            color: cs.onSurfaceVariant,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+      ],
+    ),
+  );
 }
 
 class _SummaryGrid extends StatelessWidget {

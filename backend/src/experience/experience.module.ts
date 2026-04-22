@@ -15,6 +15,7 @@ import { AqiDataSchema } from '../schemas/aqi-data.schema';
 import { BadgeSchema } from '../schemas/badge.schema';
 import { UserBadgeSchema } from '../schemas/user-badge.schema';
 import { LeaderboardSchema } from '../schemas/leaderboard.schema';
+import { UserProjectionSchema } from '../schemas/user-projection.schema';
 
 @Module({
   imports: [
@@ -28,6 +29,7 @@ import { LeaderboardSchema } from '../schemas/leaderboard.schema';
       { name: 'Badge', schema: BadgeSchema },
       { name: 'UserBadge', schema: UserBadgeSchema },
       { name: 'Leaderboard', schema: LeaderboardSchema },
+      { name: 'UserProjection', schema: UserProjectionSchema },
     ]),
   ],
   controllers: [DashboardController, InsightsController, ProfileController],

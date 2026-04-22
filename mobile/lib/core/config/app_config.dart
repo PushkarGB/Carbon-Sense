@@ -1,7 +1,7 @@
 class AppConfig {
   static const String apiBaseUrl = String.fromEnvironment(
     'API_BASE_URL',
-    defaultValue: 'http://10.10.10.151:5000',
+    defaultValue: 'https://carbon-sense-production.up.railway.app',
   );
 
   static const String cloudinaryCloudName = String.fromEnvironment(

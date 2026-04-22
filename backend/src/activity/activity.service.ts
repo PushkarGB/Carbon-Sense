@@ -158,6 +158,7 @@ export class ActivityService {
       const lockedUserProfile = await this.userProfileModel
         .findOne({ user_id: userId })
         .session(session)
+        .lean()
         .exec();
 
       if (
@@ -249,17 +250,54 @@ export class ActivityService {
             )
           : lockedUserProfile!.performance_metrics;
 
-      const nextEngagementMetrics =
+      const baseEngagementMetrics =
         submissionType === 'daily'
           ? {
               ...lockedUserProfile!.engagement_metrics,
               total_days_logged: dailyLogs.length,
             }
           : lockedUserProfile!.engagement_metrics;
+
+      // Evaluate tasks FIRST so we get the post-evaluation stats.
+      // Previously, evaluateTasks() wrote its own $set which was then
+      // overwritten by the outer profileUpdate — causing task_stats
+      // and total_tasks_completed to revert to stale pre-evaluation values.
+      let completedTaskIds: string[];
+      let finalEngagementMetrics: EngagementMetrics;
+      let finalTaskStats: TaskStats;
+      try {
+        const taskResult = await this.evaluateTasks(
+          userId,
+          activityInput,
+          submissionType,
+          emissionResult.totalEmission,
+          nextPerformanceMetrics.baseline_emission,
+          nextPerformanceMetrics.current_avg_emission,
+          submissionType === 'daily' ? getYesterdayEmission(carbonRecords) : 0,
+          nextBehaviorProfile,
+          lockedUserProfile!.task_stats,
+          baseEngagementMetrics,
+          session,
+        );
+        completedTaskIds = taskResult.completedTaskIds;
+        finalEngagementMetrics = taskResult.engagementMetrics;
+        finalTaskStats = taskResult.taskStats;
+      } catch (error) {
+        if (error instanceof HttpException) {
+          throw error;
+        }
+        throw new InternalServerErrorException({
+          error: 'TASK_EVALUATION_FAILED',
+          message: 'Unable to evaluate tasks',
+        });
+      }
+
+      // Single unified profile write with post-evaluation stats.
       const profileUpdate: Record<string, unknown> = {
         behavior_profile: nextBehaviorProfile,
-        engagement_metrics: nextEngagementMetrics,
+        engagement_metrics: finalEngagementMetrics,
         performance_metrics: nextPerformanceMetrics,
+        task_stats: finalTaskStats,
         weekly_insights: nextWeeklyInsights,
         updated_at: now,
       };
@@ -281,31 +319,6 @@ export class ActivityService {
         { $set: profileUpdate },
         { session },
       );
-
-      let completedTaskIds: string[];
-      try {
-        completedTaskIds = await this.evaluateTasks(
-          userId,
-          activityInput,
-          submissionType,
-          emissionResult.totalEmission,
-          nextPerformanceMetrics.baseline_emission,
-          nextPerformanceMetrics.current_avg_emission,
-          submissionType === 'daily' ? getYesterdayEmission(carbonRecords) : 0,
-          nextBehaviorProfile,
-          lockedUserProfile!.task_stats,
-          lockedUserProfile!.engagement_metrics,
-          session,
-        );
-      } catch (error) {
-        if (error instanceof HttpException) {
-          throw error;
-        }
-        throw new InternalServerErrorException({
-          error: 'TASK_EVALUATION_FAILED',
-          message: 'Unable to evaluate tasks',
-        });
-      }
 
       emissionResultToEmit = { breakdown: emissionResult.breakdown, totalEmission: emissionResult.totalEmission };
       completedTaskIdsToEmit = completedTaskIds;
@@ -361,7 +374,16 @@ export class ActivityService {
     existingTaskStats: TaskStats,
     existingEngagementMetrics: EngagementMetrics,
     session: ClientSession,
-  ): Promise<string[]> {
+  ): Promise<{
+    completedTaskIds: string[];
+    engagementMetrics: EngagementMetrics;
+    taskStats: TaskStats;
+  }> {
+    const nextTaskStats: TaskStats = { ...existingTaskStats };
+    const nextEngagementMetrics: EngagementMetrics = {
+      ...existingEngagementMetrics,
+    };
+
     const userDailyTask = await this.userDailyTaskModel
       .findOne({ date: activity.date, user_id: userId })
       .session(session)
@@ -372,17 +394,14 @@ export class ActivityService {
         userId,
         session,
       );
-      await this.userProfileModel.updateOne(
-        { user_id: userId },
-        {
-          $set: {
-            'engagement_metrics.task_completion_rate': taskCompletionRate,
-            updated_at: new Date(),
-          },
+      return {
+        completedTaskIds: [],
+        engagementMetrics: {
+          ...nextEngagementMetrics,
+          task_completion_rate: taskCompletionRate,
         },
-        { session },
-      );
-      return [];
+        taskStats: nextTaskStats,
+      };
     }
 
     const [recentVehicleDistanceAverage, profileAverageWalkDistance] =
@@ -412,10 +431,6 @@ export class ActivityService {
     );
 
     const completedTaskIds: string[] = [];
-    const nextTaskStats: TaskStats = { ...existingTaskStats };
-    const nextEngagementMetrics: EngagementMetrics = {
-      ...existingEngagementMetrics,
-    };
     let tasksChanged = false;
 
     for (const task of userDailyTask.tasks) {
@@ -466,22 +481,15 @@ export class ActivityService {
       session,
     );
 
-    await this.userProfileModel.updateOne(
-      { user_id: userId },
-      {
-        $set: {
-          engagement_metrics: {
-            ...nextEngagementMetrics,
-            task_completion_rate: taskCompletionRate,
-          },
-          task_stats: nextTaskStats,
-          updated_at: new Date(),
-        },
+    // Return updated stats — the caller writes them in a single unified $set.
+    return {
+      completedTaskIds,
+      engagementMetrics: {
+        ...nextEngagementMetrics,
+        task_completion_rate: taskCompletionRate,
       },
-      { session },
-    );
-
-    return completedTaskIds;
+      taskStats: nextTaskStats,
+    };
   }
 
   private async calculateRecentVehicleDistanceAverage(

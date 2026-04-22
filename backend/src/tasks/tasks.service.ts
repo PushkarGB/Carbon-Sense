@@ -159,6 +159,7 @@ export class TasksService {
       const userProfile = await this.userProfileModel
         .findOne({ user_id: userId })
         .session(session)
+        .lean()
         .exec();
 
       if (!userProfile) {
@@ -306,6 +307,7 @@ export class TasksService {
       const userProfile = await this.userProfileModel
         .findOne({ user_id: userId })
         .session(session)
+        .lean()
         .exec();
 
       if (!userProfile) {
@@ -478,7 +480,7 @@ export class TasksService {
       });
     }
 
-    const profile = await this.userProfileModel.findOne({ user_id: userId }).exec();
+    const profile = await this.userProfileModel.findOne({ user_id: userId }).lean().exec();
     if (!profile) {
       throw new InternalServerErrorException({
         error: 'PROFILE_NOT_FOUND',

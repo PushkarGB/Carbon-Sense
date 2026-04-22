@@ -57,6 +57,10 @@ final bootstrapProvider = FutureProvider<BootstrapResult>((ref) async {
       if (updated == true && streakDays is num) {
         final today = todayIstYyyyMmDd();
         await prefs.writeStreakPopupValue(streakDays.toInt());
+        await prefs.writeStreakPopupLost(data['streak_lost'] == true);
+        await prefs.writeStreakPopupPreviousValue(
+          (data['previous_streak_days'] as num?)?.toInt() ?? 0,
+        );
         await prefs.writeStreakPopupPendingYmd(today);
       }
     }

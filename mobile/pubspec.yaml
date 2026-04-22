@@ -44,6 +44,9 @@ dependencies:
   fl_chart: ^1.2.0
   cached_network_image: ^3.4.1
   visibility_detector: ^0.4.0+2
+  flutter_local_notifications: ^18.0.1
+  android_alarm_manager_plus: ^4.0.6
+  permission_handler: ^11.4.0
 
 dev_dependencies:
   flutter_test:

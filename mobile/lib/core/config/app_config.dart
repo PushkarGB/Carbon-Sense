@@ -6,7 +6,7 @@ class AppConfig {
 
   static const String cloudinaryCloudName = String.fromEnvironment(
     'CLOUDINARY_CLOUD_NAME',
-    defaultValue: 'dlveoyxax',
+    defaultValue: 'ddqpxsmxm',
   );
 
   static const String cloudinaryUploadPreset = String.fromEnvironment(

@@ -39,11 +39,29 @@ export class ProfileService {
     const awardedByBadgeId = new Map(
       awarded.map((row) => [row.badge_id, row.awarded_at]),
     );
-    const badgeRows = badges.map((badge) => ({
-      ...badge,
-      achieved: awardedByBadgeId.has(badge.badge_id),
-      awarded_at: awardedByBadgeId.get(badge.badge_id) ?? null,
-    }));
+    const badgeRows = badges.map((badge) => {
+      let currentValue = 0;
+      if (badge.badge_id === 'first_task') {
+        currentValue = profile.engagement_metrics?.total_tasks_completed ?? 0;
+      } else if (badge.category === 'eco_action') {
+        currentValue = profile.task_stats.eco_action;
+      } else if (badge.category === 'emission_reduction') {
+        currentValue = profile.task_stats.emission_reduction;
+      } else if (badge.category === 'awareness') {
+        currentValue = profile.task_stats.awareness;
+      } else if (badge.category === 'streak') {
+        currentValue = profile.streak_days;
+      } else if (badge.category === 'performance') {
+        currentValue = profile.performance_metrics?.reduction_percent ?? 0;
+      }
+
+      return {
+        ...badge,
+        current_value: currentValue,
+        achieved: awardedByBadgeId.has(badge.badge_id),
+        awarded_at: awardedByBadgeId.get(badge.badge_id) ?? null,
+      };
+    });
 
     return {
       user: toPublicUser(user),
@@ -79,5 +97,12 @@ export class ProfileService {
         total_badges: badges.length,
       },
     };
+  }
+  async setStation(userId: Types.ObjectId, station: string) {
+    await this.userModel.updateOne(
+      { _id: userId },
+      { $set: { station } }
+    ).exec();
+    return { success: true, station };
   }
 }

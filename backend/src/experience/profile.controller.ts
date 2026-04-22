@@ -1,4 +1,4 @@
-import { Controller, Get, Req, UseGuards } from '@nestjs/common';
+import { Controller, Get, Put, Body, Req, UseGuards } from '@nestjs/common';
 import type { Request } from 'express';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { ProfileService } from './profile.service';
@@ -14,5 +14,10 @@ export class ProfileController {
   @Get('me')
   getMe(@Req() req: RequestWithUser) {
     return this.profileService.getMe(req.user._id);
+  }
+
+  @Put('station')
+  setStation(@Req() req: RequestWithUser, @Body('station') station: string) {
+    return this.profileService.setStation(req.user._id, station);
   }
 }

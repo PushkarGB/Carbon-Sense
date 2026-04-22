@@ -1,4 +1,4 @@
-import { Controller, Get, Req, UseGuards } from '@nestjs/common';
+import { Controller, Get, Query, Req, UseGuards } from '@nestjs/common';
 import type { Request } from 'express';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { DashboardService } from './dashboard.service';
@@ -14,5 +14,10 @@ export class DashboardController {
   @Get('home')
   getHome(@Req() req: RequestWithUser) {
     return this.dashboardService.getHome(req.user._id);
+  }
+
+  @Get('aqi')
+  getAqi(@Query('station') station: string, @Query('city') city: string) {
+    return this.dashboardService.getAqi(station, city);
   }
 }

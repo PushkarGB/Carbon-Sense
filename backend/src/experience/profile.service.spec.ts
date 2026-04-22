@@ -32,6 +32,7 @@ describe('ProfileService', () => {
             engagement_metrics: {
               app_open_count: 10,
               task_completion_rate: 0.75,
+              total_tasks_completed: 7,
               total_days_logged: 7,
             },
             onboarding_completed: true,

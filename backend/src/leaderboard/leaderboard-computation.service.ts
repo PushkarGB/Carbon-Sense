@@ -65,20 +65,9 @@ export class LeaderboardComputationService {
     const rows = await this.runAggregation(userId);
 
     if (rows.length === 0) {
-      await this.leaderboardModel.updateOne(
-        { user_id: userId },
-        {
-          $set: {
-            avg_emission: 0,
-            total_emission: 0,
-            total_days_logged: 0,
-            city: user.city,
-            role: user.role,
-            updated_at: now,
-          },
-        },
-        { upsert: true },
-      );
+      // User has no carbon records yet — do NOT write a zero-row to the
+      // leaderboard collection. Zero-row ghosts would appear in rankings
+      // with 0 avg_emission and 0 days, which is misleading and unfair.
       return { updated_at: now.toISOString() };
     }
 
@@ -190,7 +179,12 @@ export class LeaderboardComputationService {
     city?: string;
     role?: string;
   }): PipelineStage[] {
-    const match: Record<string, unknown> = {};
+    // Always exclude users who have never logged any activity.
+    // This is the primary fix: zero-emission / zero-day users are
+    // meaningless in a carbon-reduction leaderboard.
+    const match: Record<string, unknown> = {
+      total_days_logged: { $gt: 0 },
+    };
     if (filters.city) {
       match.city = filters.city;
     }
@@ -198,10 +192,9 @@ export class LeaderboardComputationService {
       match.role = filters.role;
     }
 
-    const stages: PipelineStage[] = [];
-    if (Object.keys(match).length > 0) {
-      stages.push({ $match: match });
-    }
+    const stages: PipelineStage[] = [
+      { $match: match },
+    ];
 
     stages.push(
       { $sort: { avg_emission: 1, total_days_logged: -1, user_id: 1 } },

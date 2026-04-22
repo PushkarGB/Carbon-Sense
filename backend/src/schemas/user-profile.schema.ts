@@ -39,6 +39,7 @@ const BehaviorProfileSchema = new Schema(
 const EngagementMetricsSchema = new Schema(
   {
     task_completion_rate: { type: Number, required: true },
+    total_tasks_completed: { type: Number, required: true },
     total_days_logged: { type: Number, required: true },
     app_open_count: { type: Number, required: true },
   },
@@ -128,6 +129,7 @@ export interface UserProfile {
   };
   engagement_metrics: {
     task_completion_rate: number;
+    total_tasks_completed: number;
     total_days_logged: number;
     app_open_count: number;
   };

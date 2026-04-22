@@ -6,7 +6,9 @@ export type RequestUser = Pick<
   | 'name'
   | 'email'
   | 'role'
+  | 'state'
   | 'city'
+  | 'station'
   | 'profile_picture_url'
   | 'created_at'
   | 'updated_at'
@@ -18,7 +20,9 @@ export function toPublicUser(user: RequestUser) {
     name: user.name,
     email: user.email,
     role: user.role,
+    state: user.state,
     city: user.city,
+    station: user.station,
     profile_picture_url: user.profile_picture_url,
     created_at: user.created_at,
     updated_at: user.updated_at,

@@ -85,6 +85,7 @@ describe('BadgeEngineService', () => {
     it('should evaluate and award task badges based on threshold', async () => {
       const userId = new Types.ObjectId().toString();
       mockUserProfileModel.exec.mockResolvedValueOnce({
+        engagement_metrics: { total_tasks_completed: 6 },
         task_stats: { eco_action: 6, emission_reduction: 0, awareness: 0 },
       });
 
@@ -124,6 +125,30 @@ describe('BadgeEngineService', () => {
       await expect(
         (service as any).awardBadgeIfEligible(new Types.ObjectId(userId), 'eco_5', 5, 6)
       ).resolves.not.toThrow();
+    });
+
+    it('awards first_task when only system-task total completions increased', async () => {
+      const userId = new Types.ObjectId().toString();
+      mockUserProfileModel.exec.mockResolvedValueOnce({
+        engagement_metrics: { total_tasks_completed: 1 },
+        task_stats: { eco_action: 0, emission_reduction: 0, awareness: 0 },
+      });
+
+      mockBadgeModel.exec.mockResolvedValue([]);
+      mockUserBadgeModel.exists.mockResolvedValueOnce(false);
+      mockUserBadgeModel.create.mockResolvedValueOnce({});
+
+      await (service as any).evaluateTaskBadges({
+        userId,
+        date: '2026-04-12',
+        completedTaskIds: ['daily_input'],
+      });
+
+      expect(mockUserBadgeModel.create).toHaveBeenCalledWith({
+        user_id: new Types.ObjectId(userId),
+        badge_id: 'first_task',
+        awarded_at: expect.any(Date),
+      });
     });
   });
 

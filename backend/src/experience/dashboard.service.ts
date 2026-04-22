@@ -54,7 +54,9 @@ export class DashboardService {
     }
 
     // AQI: lookup cached data, fallback to live AQICN fetch if stale/missing
-    let aqi = await this.aqiFetcherService.getAqiForCity(user.city);
+    let aqi = user.station
+      ? await this.aqiFetcherService.getAqiForStation(user.station, user.city)
+      : await this.aqiFetcherService.getAqiForCity(user.city);
 
     const completedTasks =
       tasksDoc?.tasks.filter((task) => task.status === 'completed').length ?? 0;
@@ -73,6 +75,7 @@ export class DashboardService {
           : {
               aqi: aqi.aqi,
               city: aqi.city,
+              station: aqi.station,
               co: aqi.co,
               fetched_at: aqi.fetched_at,
               no2: aqi.no2,
@@ -101,6 +104,30 @@ export class DashboardService {
         todayYmd,
         profile.performance_metrics.current_avg_emission,
       ),
+    };
+  }
+
+  async getAqi(station: string, city: string) {
+    if (!station && !city) {
+      throw new InternalServerErrorException('City or station required');
+    }
+    const aqi = station
+      ? await this.aqiFetcherService.getAqiForStation(station, city || 'unknown')
+      : await this.aqiFetcherService.getAqiForCity(city);
+    
+    if (!aqi) {
+      return null;
+    }
+    return {
+      aqi: aqi.aqi,
+      city: aqi.city,
+      station: aqi.station,
+      co: aqi.co,
+      fetched_at: aqi.fetched_at,
+      no2: aqi.no2,
+      pm10: aqi.pm10,
+      pm25: aqi.pm25,
+      so2: aqi.so2,
     };
   }
 }

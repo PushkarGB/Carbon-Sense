@@ -165,7 +165,11 @@ export class BadgeEngineService implements OnApplicationBootstrap {
     await this.evaluateCategoryBadges(new Types.ObjectId(payload.userId), 'emission_reduction', taskStats.emission_reduction);
     await this.evaluateCategoryBadges(new Types.ObjectId(payload.userId), 'awareness', taskStats.awareness);
 
-    const totalTasks = taskStats.eco_action + taskStats.emission_reduction + taskStats.awareness;
+    const totalTasks =
+      userProfile.engagement_metrics?.total_tasks_completed ??
+      taskStats.eco_action +
+        taskStats.emission_reduction +
+        taskStats.awareness;
     if (totalTasks >= 1) {
       await this.awardBadgeIfEligible(new Types.ObjectId(payload.userId), 'first_task', 1, totalTasks);
     }

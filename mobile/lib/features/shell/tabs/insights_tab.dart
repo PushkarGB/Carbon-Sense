@@ -152,12 +152,39 @@ class _InsightsBody extends ConsumerWidget {
 
   final InsightsSummary summary;
 
+  static const double _trendEpsilon = 0.05;
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final cs = Theme.of(context).colorScheme;
     final emissions = summary.emissions;
     final projection = summary.projection;
     final projectedPoints = projection?.next30Days ?? const <ProjectionPoint>[];
+    final hasProjection = projectedPoints.isNotEmpty;
+    final actualCount = emissions.length;
+    final totalCount = actualCount + projectedPoints.length;
+    final maxX = totalCount > 1 ? (totalCount - 1).toDouble() : 1.0;
+
+    final actualSpots = [
+      for (var i = 0; i < emissions.length; i++)
+        FlSpot(
+          i.toDouble(),
+          emissions[i].totalEmission,
+        ),
+    ];
+
+    final projectedSpots = [
+      if (emissions.isNotEmpty && projectedPoints.isNotEmpty)
+        FlSpot(
+          (emissions.length - 1).toDouble(),
+          emissions.last.totalEmission,
+        ),
+      for (var i = 0; i < projectedPoints.length; i++)
+        FlSpot(
+          (emissions.length + i).toDouble(),
+          projectedPoints[i].predictedEmission,
+        ),
+    ];
 
     final actualMax = emissions.isEmpty
         ? 0.0
@@ -181,7 +208,7 @@ class _InsightsBody extends ConsumerWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Emissions',
+                  'Carbon shadow (actual + projection)',
                   style: Theme.of(context).textTheme.titleMedium?.copyWith(
                     fontWeight: FontWeight.w800,
                   ),
@@ -202,55 +229,118 @@ class _InsightsBody extends ConsumerWidget {
                     height: 180,
                     child: LineChart(
                       LineChartData(
-                        gridData: const FlGridData(show: false),
+                        gridData: FlGridData(
+                          show: true,
+                          drawVerticalLine: false,
+                          horizontalInterval: maxY / 4,
+                          getDrawingHorizontalLine: (_) => FlLine(
+                            color: cs.outlineVariant.withValues(alpha: 0.25),
+                            strokeWidth: 1,
+                          ),
+                        ),
                         titlesData: const FlTitlesData(show: false),
                         borderData: FlBorderData(show: false),
+                        minX: 0,
+                        maxX: maxX,
                         minY: 0,
                         maxY: maxY,
+                        lineTouchData: LineTouchData(
+                          touchTooltipData: LineTouchTooltipData(
+                            getTooltipColor: (_) => cs.surfaceContainerHighest,
+                            tooltipPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                            getTooltipItems: (touchedSpots) {
+                              return touchedSpots.map((spot) {
+                                final index = spot.x.round();
+                                final dateLabel = _xLabelForIndex(
+                                  index,
+                                  emissions,
+                                  projectedPoints,
+                                );
+                                final isProjectionPoint = index >= emissions.length;
+                                return LineTooltipItem(
+                                  '${isProjectionPoint ? 'Projection' : 'Actual'} • $dateLabel\n${spot.y.toStringAsFixed(1)} kg',
+                                  TextStyle(
+                                    color: cs.onSurface,
+                                    fontWeight: FontWeight.w800,
+                                    fontSize: 14,
+                                  ),
+                                );
+                              }).toList();
+                            },
+                          ),
+                          handleBuiltInTouches: true,
+                        ),
+                        extraLinesData: hasProjection && actualCount > 0
+                            ? ExtraLinesData(
+                                verticalLines: [
+                                  VerticalLine(
+                                    x: (actualCount - 1).toDouble(),
+                                    color: cs.tertiary.withValues(alpha: 0.45),
+                                    strokeWidth: 1.2,
+                                    dashArray: const [4, 4],
+                                  ),
+                                ],
+                              )
+                            : ExtraLinesData(),
                         lineBarsData: [
                           LineChartBarData(
-                            spots: [
-                              for (var i = 0; i < emissions.length; i++)
-                                FlSpot(
-                                  i.toDouble(),
-                                  emissions[i].totalEmission,
-                                ),
-                            ],
+                            spots: actualSpots,
                             isCurved: true,
-                            color: cs.primary,
+                            gradient: LinearGradient(
+                              colors: [cs.primary, cs.tertiary],
+                            ),
                             barWidth: 4,
-                            dotData: const FlDotData(show: true),
+                            dotData: FlDotData(
+                              show: true,
+                              getDotPainter: (spot, percent, bar, index) {
+                                return FlDotCirclePainter(
+                                  radius: 3.8,
+                                  color: cs.primary,
+                                  strokeWidth: 1.8,
+                                  strokeColor: cs.onPrimary,
+                                );
+                              },
+                            ),
                             belowBarData: BarAreaData(
                               show: true,
                               gradient: LinearGradient(
                                 begin: Alignment.topCenter,
                                 end: Alignment.bottomCenter,
                                 colors: [
-                                  cs.primary.withValues(alpha: 0.4),
-                                  cs.primary.withValues(alpha: 0.0),
+                                  cs.primary.withValues(alpha: 0.5),
+                                  cs.tertiary.withValues(alpha: 0.0),
                                 ],
                               ),
                             ),
                           ),
                           if (projectedPoints.isNotEmpty)
                             LineChartBarData(
-                              spots: [
-                                if (emissions.isNotEmpty)
-                                  FlSpot(
-                                    (emissions.length - 1).toDouble(),
-                                    emissions.last.totalEmission,
-                                  ),
-                                for (var i = 0; i < projectedPoints.length; i++)
-                                  FlSpot(
-                                    (emissions.length + i).toDouble(),
-                                    projectedPoints[i].predictedEmission,
-                                  ),
-                              ],
+                              spots: projectedSpots,
                               isCurved: true,
                               color: cs.tertiary,
                               barWidth: 3,
                               dashArray: const [8, 5],
-                              dotData: const FlDotData(show: false),
+                              dotData: FlDotData(
+                                show: true,
+                                checkToShowDot: (spot, _) {
+                                  final index = spot.x.round();
+                                  if (index < emissions.length) {
+                                    return false;
+                                  }
+                                  final projectionIndex = index - emissions.length;
+                                  return projectionIndex == 0 ||
+                                      projectionIndex == projectedPoints.length - 1 ||
+                                      projectionIndex % 5 == 0;
+                                },
+                                getDotPainter: (spot, percent, bar, index) {
+                                  return FlDotCirclePainter(
+                                    radius: 4.4,
+                                    color: cs.tertiary,
+                                    strokeWidth: 2,
+                                    strokeColor: cs.onTertiary,
+                                  );
+                                },
+                              ),
                               belowBarData: BarAreaData(
                                 show: true,
                                 gradient: LinearGradient(
@@ -285,6 +375,25 @@ class _InsightsBody extends ConsumerWidget {
                       ),
                     ],
                   ),
+                  const SizedBox(height: 12),
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: cs.surfaceContainerHighest,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Text(
+                      _projectionNarrative(
+                        emissions: emissions,
+                        projectedPoints: projectedPoints,
+                        yearEnd: projection?.yearEndProjection,
+                      ),
+                      style: TextStyle(
+                        color: cs.onSurface,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
                 ],
                 const SizedBox(height: 16),
                 Container(
@@ -299,7 +408,7 @@ class _InsightsBody extends ConsumerWidget {
                       const SizedBox(width: 12),
                       Expanded(
                         child: Text(
-                          'Your emissions are ${summary.trend} compared to the previous period. Keep tracking to maintain awareness!',
+                          'Selected-range trend: ${summary.trend}. Keep tracking to maintain awareness!',
                           style: TextStyle(
                             color: cs.onSecondaryContainer,
                             fontWeight: FontWeight.w600,
@@ -318,6 +427,8 @@ class _InsightsBody extends ConsumerWidget {
         const SizedBox(height: 12),
         _ComparisonCard(summary: summary),
         const SizedBox(height: 12),
+        _ThisWeekEmissionsCard(emissions: summary.emissions),
+        const SizedBox(height: 12),
         _TrendCard(summary: summary),
         const SizedBox(height: 12),
         _BreakdownCard(latest: summary.latestBreakdown),
@@ -325,6 +436,76 @@ class _InsightsBody extends ConsumerWidget {
         _AqiCard(aqi: summary.aqi),
       ],
     );
+  }
+
+  String _projectionNarrative({
+    required List<EmissionPoint> emissions,
+    required List<ProjectionPoint> projectedPoints,
+    required ProjectionPoint? yearEnd,
+  }) {
+    final current = emissions.isNotEmpty ? emissions.last.totalEmission : null;
+    final monthPoint = projectedPoints.isNotEmpty ? projectedPoints.last : null;
+    final yearPoint = yearEnd;
+
+    if (current == null || monthPoint == null || yearPoint == null) {
+      return 'Projection is available for next 30 days. Year-end projection will appear when the model provides it.';
+    }
+
+    final monthDelta = monthPoint.predictedEmission - current;
+    final yearDelta = yearPoint.predictedEmission - current;
+
+    final direction = _directionLabel(monthDelta, yearDelta);
+
+    return 'If you continue at this rate, your daily emissions are projected to $direction to ${monthPoint.predictedEmission.toStringAsFixed(1)} kg by ${_shortDate(monthPoint.date)} and ${yearPoint.predictedEmission.toStringAsFixed(1)} kg by ${yearPoint.date}.';
+  }
+
+  String _directionLabel(double monthDelta, double yearDelta) {
+    final avgDelta = (monthDelta + yearDelta) / 2;
+    if (avgDelta > _trendEpsilon) {
+      return 'increase';
+    }
+    if (avgDelta < -_trendEpsilon) {
+      return 'decrease';
+    }
+    return 'stay stable';
+  }
+
+  String _shortDate(String ymd) {
+    final parts = ymd.split('-');
+    if (parts.length != 3) {
+      return ymd;
+    }
+    final month = switch (parts[1]) {
+      '01' => 'Jan',
+      '02' => 'Feb',
+      '03' => 'Mar',
+      '04' => 'Apr',
+      '05' => 'May',
+      '06' => 'Jun',
+      '07' => 'Jul',
+      '08' => 'Aug',
+      '09' => 'Sep',
+      '10' => 'Oct',
+      '11' => 'Nov',
+      '12' => 'Dec',
+      _ => parts[1],
+    };
+    return '${parts[2]} $month';
+  }
+
+  String _xLabelForIndex(
+    int index,
+    List<EmissionPoint> emissions,
+    List<ProjectionPoint> projectedPoints,
+  ) {
+    if (index < emissions.length) {
+      return _shortDate(emissions[index].date);
+    }
+    final projectionIndex = index - emissions.length;
+    if (projectionIndex >= 0 && projectionIndex < projectedPoints.length) {
+      return _shortDate(projectedPoints[projectionIndex].date);
+    }
+    return '';
   }
 }
 
@@ -574,7 +755,7 @@ class _TrendCard extends ConsumerWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'Weekly Trend',
+                        'Trend (${summary.rangeDays}d)',
                         style: Theme.of(context).textTheme.titleMedium
                             ?.copyWith(fontWeight: FontWeight.w800),
                       ),
@@ -594,6 +775,170 @@ class _TrendCard extends ConsumerWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+class _ThisWeekEmissionsCard extends StatelessWidget {
+  const _ThisWeekEmissionsCard({required this.emissions});
+
+  final List<EmissionPoint> emissions;
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+
+    if (emissions.isEmpty) {
+      return Card(
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Text(
+            'No weekly emissions to display yet.',
+            style: TextStyle(color: cs.onSurfaceVariant),
+          ),
+        ),
+      );
+    }
+
+    final dailyByDate = <String, double>{
+      for (final e in emissions) e.date: e.totalEmission,
+    };
+
+    final anchorDate = DateTime.tryParse(emissions.last.date);
+    if (anchorDate == null) {
+      return Card(
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Text(
+            'This week\'s emissions are unavailable.',
+            style: TextStyle(color: cs.onSurfaceVariant),
+          ),
+        ),
+      );
+    }
+
+    final week = List.generate(7, (index) {
+      final day = anchorDate.subtract(Duration(days: 6 - index));
+      final ymd = _toYmd(day);
+      return (
+        date: day,
+        ymd: ymd,
+        value: dailyByDate[ymd] ?? 0.0,
+      );
+    });
+
+    final maxValue = week
+        .map((d) => d.value)
+        .reduce((a, b) => a > b ? a : b);
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'This week\'s emissions',
+              style: Theme.of(
+                context,
+              ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
+            ),
+            const SizedBox(height: 12),
+            SizedBox(
+              height: 190,
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  for (var i = 0; i < week.length; i++) ...[
+                    Expanded(
+                      child: _WeekEmissionBar(
+                        label: _weekdayLabel(week[i].date),
+                        value: week[i].value,
+                        maxValue: maxValue,
+                      ),
+                    ),
+                    if (i != week.length - 1) const SizedBox(width: 8),
+                  ],
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  String _toYmd(DateTime day) {
+    final y = day.year.toString().padLeft(4, '0');
+    final m = day.month.toString().padLeft(2, '0');
+    final d = day.day.toString().padLeft(2, '0');
+    return '$y-$m-$d';
+  }
+
+  String _weekdayLabel(DateTime day) {
+    return switch (day.weekday) {
+      DateTime.monday => 'Mon',
+      DateTime.tuesday => 'Tue',
+      DateTime.wednesday => 'Wed',
+      DateTime.thursday => 'Thu',
+      DateTime.friday => 'Fri',
+      DateTime.saturday => 'Sat',
+      DateTime.sunday => 'Sun',
+      _ => '',
+    };
+  }
+}
+
+class _WeekEmissionBar extends StatelessWidget {
+  const _WeekEmissionBar({
+    required this.label,
+    required this.value,
+    required this.maxValue,
+  });
+
+  final String label;
+  final double value;
+  final double maxValue;
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final normalized = maxValue <= 0 ? 0.0 : (value / maxValue).clamp(0.0, 1.0);
+    final barHeight = 12 + (normalized * 96);
+
+    return Column(
+      mainAxisAlignment: MainAxisAlignment.end,
+      children: [
+        Text(
+          value.toStringAsFixed(1),
+          style: TextStyle(
+            color: cs.onSurfaceVariant,
+            fontWeight: FontWeight.w700,
+            fontSize: 11,
+          ),
+        ),
+        const SizedBox(height: 6),
+        Container(
+          width: 24,
+          height: barHeight,
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.bottomCenter,
+              end: Alignment.topCenter,
+              colors: [cs.primary, cs.tertiary],
+            ),
+            borderRadius: BorderRadius.circular(10),
+          ),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          label,
+          style: TextStyle(
+            color: cs.onSurfaceVariant,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+      ],
     );
   }
 }
@@ -651,7 +996,7 @@ class _BreakdownCard extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'Carbon shadow (latest breakdown)',
+              'Latest emission breakdown',
               style: Theme.of(
                 context,
               ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),

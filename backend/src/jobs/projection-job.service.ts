@@ -9,6 +9,8 @@ import { UserProjection } from '../schemas/user-projection.schema';
 const PROJECTION_MODEL_VERSION = 'projection_v1_linear_weighted';
 const DEFAULT_ML_MODEL_VERSION = 'ml_projection_linear_profile_v1';
 const DEFAULT_ML_TIMEOUT_MS = 3000;
+const DEFAULT_ML_SCORE_ENDPOINT = 'http://127.0.0.1:8001/api/projections/score';
+const ML_SCORE_PATH = '/api/projections/score';
 
 @Injectable()
 export class ProjectionJobService {
@@ -113,9 +115,9 @@ export class ProjectionJobService {
     next30Days: UserProjection['next_30_days'];
     yearEndProjection: UserProjection['year_end_projection'];
   } | null> {
-    const endpoint =
-      process.env.ML_PROJECTION_ENDPOINT ??
-      'http://127.0.0.1:8001/api/projections/score';
+    const endpoint = resolveMlProjectionEndpoint(
+      process.env.ML_PROJECTION_ENDPOINT,
+    );
     const timeoutMs = Number(
       process.env.ML_PROJECTION_TIMEOUT_MS ?? DEFAULT_ML_TIMEOUT_MS,
     );
@@ -153,6 +155,30 @@ export class ProjectionJobService {
     } finally {
       clearTimeout(timeout);
     }
+  }
+}
+
+function resolveMlProjectionEndpoint(raw: string | undefined): string {
+  if (!raw || raw.trim().length == 0) {
+    return DEFAULT_ML_SCORE_ENDPOINT;
+  }
+
+  const endpoint = raw.trim();
+  if (endpoint.includes(ML_SCORE_PATH)) {
+    return endpoint;
+  }
+
+  try {
+    const parsed = new URL(endpoint);
+    const cleanPath = parsed.pathname.replace(/\/+$/, '');
+    if (cleanPath.length == 0 || cleanPath == '/' || cleanPath == '/health') {
+      parsed.pathname = ML_SCORE_PATH;
+      parsed.search = '';
+      return parsed.toString();
+    }
+    return endpoint;
+  } catch {
+    return endpoint;
   }
 }
 
